@@ -152,3 +152,45 @@ fn right_up_ends_resize_drag() {
     e.handle(Event::RightUp);
     assert!(matches!(e.state(), State::Armed));
 }
+
+#[test]
+fn toggle_enable_from_idle_goes_to_disabled() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::ToggleEnable);
+    assert!(matches!(e.state(), State::Disabled));
+    e.handle(Event::ToggleEnable);
+    // After re-enable, re-evaluate modifier state; no modifiers held → Idle.
+    assert!(matches!(e.state(), State::Idle));
+}
+
+#[test]
+fn fullscreen_focused_from_idle_enters_passthrough() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::FullscreenFocused);
+    assert!(matches!(e.state(), State::PassThrough));
+    e.handle(Event::FullscreenUnfocused);
+    assert!(matches!(e.state(), State::Idle));
+}
+
+#[test]
+fn fullscreen_focused_during_move_does_not_abort_drag() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange { vk: VirtualKey::Alt, down: true });
+    e.handle(Event::LeftDown { cursor: Point { x: 150, y: 150 }, target: Some(default_target()) });
+    e.handle(Event::FullscreenFocused);
+    assert!(matches!(e.state(), State::Moving { pending_passthrough: true, .. }));
+    // Drag still works:
+    let actions = e.handle(Event::MouseMove { cursor: Point { x: 160, y: 150 } });
+    assert!(matches!(actions.first(), Some(Action::UpdateDrag { .. })));
+    // On LeftUp, transition to PassThrough (pending_passthrough was set).
+    e.handle(Event::LeftUp);
+    assert!(matches!(e.state(), State::PassThrough));
+}
+
+#[test]
+fn passthrough_ignores_mouse_events() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::FullscreenFocused);
+    let actions = e.handle(Event::LeftDown { cursor: Point { x: 1, y: 1 }, target: Some(default_target()) });
+    assert!(actions.is_empty());
+}

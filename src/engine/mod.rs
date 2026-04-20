@@ -35,6 +35,23 @@ impl Engine {
     pub fn handle(&mut self, event: Event) -> Vec<Action> {
         let mut actions = Vec::with_capacity(4);
 
+        if matches!(self.state, State::Disabled | State::PassThrough) {
+            // Still update modifier state so we're correct on resume, but ignore otherwise.
+            if let Event::KeyChange { vk, down } = &event {
+                let bit = crate::engine::state::vk_bit(*vk);
+                if !bit.is_empty() {
+                    self.mods = if *down { self.mods.with(bit) } else { self.mods.without(bit) };
+                }
+            }
+            // ToggleEnable and FullscreenFocused/FullscreenUnfocused still need to be processed.
+            match &event {
+                Event::ToggleEnable | Event::FullscreenUnfocused | Event::FullscreenFocused => {
+                    // fall through to main match below
+                }
+                _ => return actions,
+            }
+        }
+
         match &event {
             Event::KeyChange { vk, down } => {
                 let bit = crate::engine::state::vk_bit(*vk);
@@ -145,7 +162,44 @@ impl Engine {
                     self.reconcile_arm_state(&mut actions);
                 }
             }
-            _ => {}
+            Event::ToggleEnable => {
+                match std::mem::replace(&mut self.state, State::Idle) {
+                    State::Disabled => {
+                        self.state = State::Idle;
+                        self.reconcile_arm_state(&mut actions);
+                        actions.push(Action::UpdateTrayIcon { enabled: true });
+                    }
+                    State::Moving { hwnd, .. } | State::Resizing { hwnd, .. } => {
+                        actions.push(Action::EndDrag { hwnd });
+                        actions.push(Action::CancelMenuActivation);
+                        self.state = State::Disabled;
+                        actions.push(Action::UpdateTrayIcon { enabled: false });
+                    }
+                    _other => {
+                        self.state = State::Disabled;
+                        actions.push(Action::UpdateTrayIcon { enabled: false });
+                    }
+                }
+            }
+            Event::FullscreenFocused => {
+                match &mut self.state {
+                    State::Idle | State::Armed => { self.state = State::PassThrough; }
+                    State::Moving { pending_passthrough, .. }
+                    | State::Resizing { pending_passthrough, .. } => {
+                        *pending_passthrough = true;
+                    }
+                    _ => {}
+                }
+            }
+            Event::FullscreenUnfocused => {
+                if let State::PassThrough = self.state {
+                    self.state = State::Idle;
+                    self.reconcile_arm_state(&mut actions);
+                } else if let State::Moving { pending_passthrough, .. }
+                    | State::Resizing { pending_passthrough, .. } = &mut self.state {
+                    *pending_passthrough = false;
+                }
+            }
         }
 
         actions
