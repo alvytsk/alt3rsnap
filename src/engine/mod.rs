@@ -32,8 +32,32 @@ impl Engine {
 
     /// Process one event; return actions for the adapter to execute.
     pub fn handle(&mut self, event: Event) -> Vec<Action> {
-        // Implementation grows task-by-task in Phase 2.
-        let _ = event;
-        Vec::new()
+        let mut actions = Vec::with_capacity(4);
+
+        match &event {
+            Event::KeyChange { vk, down } => {
+                let bit = crate::engine::state::vk_bit(*vk);
+                if !bit.is_empty() {
+                    self.mods = if *down { self.mods.with(bit) } else { self.mods.without(bit) };
+                }
+                self.reconcile_arm_state(&mut actions);
+            }
+            _ => {} // other events handled in later tasks
+        }
+
+        actions
+    }
+
+    fn reconcile_arm_state(&mut self, actions: &mut Vec<Action>) {
+        // Only Idle <-> Armed react to modifier changes; drag states ignore.
+        let arm_matches = self.config.policy.arm.matches(self.mods);
+        self.state = match (&self.state, arm_matches) {
+            (State::Idle, true) => {
+                let _ = actions;  // no action for now; tray icon update in later task
+                State::Armed
+            }
+            (State::Armed, false) => State::Idle,
+            _ => std::mem::replace(&mut self.state, State::Idle),
+        };
     }
 }
