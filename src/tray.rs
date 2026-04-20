@@ -36,9 +36,9 @@ static ENABLED: AtomicBool = AtomicBool::new(true);
 
 pub fn install(tool_hwnd: HWND) {
     unsafe {
-        let hinst = GetModuleHandleW(None).unwrap_or_default();
-        let icon_id = windows::core::PCWSTR(1 as usize as *const u16);
-        let hicon = LoadIconW(HINSTANCE(hinst.0), icon_id)
+        let hinstance: HINSTANCE = GetModuleHandleW(None).unwrap_or_default().into();
+        let icon_id = PCWSTR(1_usize as *const u16);
+        let hicon = LoadIconW(hinstance, icon_id)
             .or_else(|_| LoadIconW(None, IDI_APPLICATION))
             .unwrap_or_default();
         let mut nid = NOTIFYICONDATAW {
