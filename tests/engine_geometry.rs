@@ -1,5 +1,6 @@
 use alt3rsnap::engine::geometry::{Point, Rect};
 use alt3rsnap::engine::geometry::{Sector, pick_sector};
+use alt3rsnap::engine::geometry::{ResizeAnchor, apply_resize};
 
 #[test]
 fn rect_translate_shifts_all_four_sides() {
@@ -59,4 +60,35 @@ fn sector_clamps_out_of_rect_cursors_to_nearest_sector() {
     let fraction = 0.333_f32;
     // Outside top-left — should clamp to TopLeft.
     assert_eq!(pick_sector(r, Point { x: -20, y: -20 }, fraction), Sector::TopLeft);
+}
+
+#[test]
+fn resize_from_top_left_moves_left_and_top_only() {
+    let r = Rect { left: 100, top: 100, right: 200, bottom: 200 };
+    let out = apply_resize(r, ResizeAnchor::TopLeft, Point { x: -10, y: -5 });
+    assert_eq!(out, Rect { left: 90, top: 95, right: 200, bottom: 200 });
+}
+
+#[test]
+fn resize_from_bottom_right_moves_right_and_bottom() {
+    let r = Rect { left: 100, top: 100, right: 200, bottom: 200 };
+    let out = apply_resize(r, ResizeAnchor::BottomRight, Point { x: 10, y: 15 });
+    assert_eq!(out, Rect { left: 100, top: 100, right: 210, bottom: 215 });
+}
+
+#[test]
+fn resize_from_left_edge_only_moves_left_side() {
+    let r = Rect { left: 100, top: 100, right: 200, bottom: 200 };
+    let out = apply_resize(r, ResizeAnchor::Left, Point { x: -20, y: 50 });
+    // Only left changes; vertical delta ignored for Left anchor.
+    assert_eq!(out, Rect { left: 80, top: 100, right: 200, bottom: 200 });
+}
+
+#[test]
+fn resize_center_symmetric_moves_opposite_edges_equally() {
+    let r = Rect { left: 100, top: 100, right: 200, bottom: 200 };
+    let out = apply_resize(r, ResizeAnchor::CenterSymmetric, Point { x: 10, y: 5 });
+    // x+10 → right moves +10, left moves -10
+    // y+5 → bottom moves +5, top moves -5
+    assert_eq!(out, Rect { left: 90, top: 95, right: 210, bottom: 205 });
 }

@@ -87,3 +87,34 @@ pub fn pick_sector(rect: Rect, cursor: Point, center_fraction: f32) -> Sector {
         _ => unreachable!(),
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResizeAnchor {
+    TopLeft, Top, TopRight,
+    Left,          Right,
+    BottomLeft, Bottom, BottomRight,
+    CenterSymmetric,
+}
+
+/// Apply a cursor delta to a rect according to the resize anchor.
+/// `delta` is cursor-now minus cursor-at-grab.
+pub fn apply_resize(rect: Rect, anchor: ResizeAnchor, delta: Point) -> Rect {
+    use ResizeAnchor::*;
+    let (dl, dt, dr, db) = match anchor {
+        TopLeft     => (delta.x, delta.y, 0, 0),
+        Top         => (0, delta.y, 0, 0),
+        TopRight    => (0, delta.y, delta.x, 0),
+        Left        => (delta.x, 0, 0, 0),
+        Right       => (0, 0, delta.x, 0),
+        BottomLeft  => (delta.x, 0, 0, delta.y),
+        Bottom      => (0, 0, 0, delta.y),
+        BottomRight => (0, 0, delta.x, delta.y),
+        CenterSymmetric => (-delta.x, -delta.y, delta.x, delta.y),
+    };
+    Rect {
+        left: rect.left + dl,
+        top: rect.top + dt,
+        right: rect.right + dr,
+        bottom: rect.bottom + db,
+    }
+}
