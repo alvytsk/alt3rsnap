@@ -7,7 +7,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::Shell::{
-    NOTIFYICONDATAW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE,
+    NOTIFYICONDATAW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP,
+    NIIF_WARNING, NIM_ADD, NIM_DELETE, NIM_MODIFY,
     Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -87,6 +88,23 @@ fn toggle_enabled() {
 }
 
 pub fn set_enabled_flag(enabled: bool) { ENABLED.store(enabled, Ordering::SeqCst); }
+
+pub fn show_balloon(title: &str, text: &str) {
+    unsafe {
+        let hwnd = crate::tool_window::hwnd();
+        let mut nid = NOTIFYICONDATAW {
+            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+            hWnd: hwnd,
+            uID: 1,
+            uFlags: NIF_INFO,
+            ..Default::default()
+        };
+        for (i, c) in title.encode_utf16().enumerate().take(63) { nid.szInfoTitle[i] = c; }
+        for (i, c) in text.encode_utf16().enumerate().take(255)  { nid.szInfo[i] = c; }
+        nid.dwInfoFlags = NIIF_WARNING;
+        let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+}
 
 fn show_menu(hwnd: HWND) {
     unsafe {

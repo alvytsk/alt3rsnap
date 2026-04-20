@@ -118,16 +118,12 @@ pub unsafe fn hwnd_rect(hwnd: HWND) -> Option<GRect> {
     Some(from_win_rect(r))
 }
 
-pub unsafe fn set_window_rect(hwnd: HWND, rect: GRect) {
-    let _ = SetWindowPos(
-        hwnd,
-        HWND_TOP,
-        rect.left,
-        rect.top,
-        rect.width(),
-        rect.height(),
+pub unsafe fn set_window_rect(hwnd: HWND, rect: GRect) -> bool {
+    SetWindowPos(
+        hwnd, HWND_TOP,
+        rect.left, rect.top, rect.width(), rect.height(),
         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING,
-    );
+    ).is_ok()
 }
 
 pub unsafe fn is_zoomed(hwnd: HWND) -> bool { IsZoomed(hwnd).as_bool() }
