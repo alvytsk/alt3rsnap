@@ -1,0 +1,6 @@
+/target
+*.pdb
+*.ico.bak
+.xwin-cache/
+.vscode/
+.idea/
