@@ -10,7 +10,7 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostQuitMessage,
     RegisterClassExW, TranslateMessage, HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE,
-    WM_DESTROY, WNDCLASSEXW,
+    WM_COMMAND, WM_DESTROY, WNDCLASSEXW,
 };
 
 pub const TOOL_WND_CLASS: PCWSTR = w!("Alt3rSnapToolWnd");
@@ -19,13 +19,12 @@ static TOOL_HWND: OnceLock<HwndWrap> = OnceLock::new();
 
 #[derive(Copy, Clone)]
 struct HwndWrap(pub HWND);
-// Safety: HWND is `!Send`/`!Sync` in `windows`, but we only access it from the main thread.
 unsafe impl Send for HwndWrap {}
 unsafe impl Sync for HwndWrap {}
 
 pub fn hwnd() -> HWND { TOOL_HWND.get().copied().map(|w| w.0).unwrap_or_default() }
 
-pub fn init_and_run() -> windows::core::Result<()> {
+pub fn create() -> windows::core::Result<HWND> {
     unsafe {
         let hinstance: HINSTANCE = GetModuleHandleW(None)?.into();
         let wc = WNDCLASSEXW {
@@ -35,24 +34,24 @@ pub fn init_and_run() -> windows::core::Result<()> {
             lpszClassName: TOOL_WND_CLASS,
             ..Default::default()
         };
-        let atom = RegisterClassExW(&wc);
-        if atom == 0 {
+        if RegisterClassExW(&wc) == 0 {
             return Err(windows::core::Error::from_win32());
         }
-
         let hwnd = CreateWindowExW(
             WINDOW_EX_STYLE::default(),
             TOOL_WND_CLASS,
             w!("Alt3rSnap"),
             WINDOW_STYLE::default(),
             0, 0, 0, 0,
-            HWND_MESSAGE,
-            None,
-            hinstance,
-            None,
+            HWND_MESSAGE, None, hinstance, None,
         )?;
         let _ = TOOL_HWND.set(HwndWrap(hwnd));
+        Ok(hwnd)
+    }
+}
 
+pub fn run_pump() {
+    unsafe {
         let mut msg = MSG::default();
         loop {
             let got = GetMessageW(&mut msg, HWND::default(), 0, 0);
@@ -61,13 +60,21 @@ pub fn init_and_run() -> windows::core::Result<()> {
             DispatchMessageW(&msg);
         }
     }
-    Ok(())
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match msg {
         WM_DESTROY => {
             PostQuitMessage(0);
+            LRESULT(0)
+        }
+        m if m == crate::tray::WM_TRAY_CALLBACK => {
+            crate::tray::on_tray_message(hwnd, wparam, lparam);
+            LRESULT(0)
+        }
+        WM_COMMAND => {
+            let id = (wparam.0 as u32) & 0xFFFF;
+            crate::tray::on_command(id);
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),

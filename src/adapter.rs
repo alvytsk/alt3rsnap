@@ -51,8 +51,8 @@ pub fn apply_actions(actions: &[Action]) -> bool {
                 win_api::cancel_menu_activation();
             },
             Action::SwallowEvent => { swallow = true; }
-            Action::UpdateTrayIcon { .. } => {
-                // Wired in Task 27 (tray).
+            Action::UpdateTrayIcon { enabled } => {
+                crate::tray::set_enabled_flag(*enabled);
             }
         }
     }
