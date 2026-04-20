@@ -1,9 +1,12 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 #[cfg(windows)]
+mod dpi;
+
+#[cfg(windows)]
 fn main() {
-    // Real Windows entry lands in Phase 5.
-    eprintln!("alt3rsnap main() — not yet wired (see Phase 5 of the plan)");
+    dpi::init();
+    eprintln!("alt3rsnap main() — DPI set; more wiring in later tasks");
 }
 
 #[cfg(not(windows))]
