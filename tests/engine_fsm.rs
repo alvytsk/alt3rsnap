@@ -114,3 +114,41 @@ fn left_up_returns_to_idle_if_modifier_released_during_drag() {
     e.handle(Event::LeftUp);
     assert!(matches!(e.state(), State::Idle));
 }
+
+#[test]
+fn armed_plus_right_down_in_top_left_picks_top_left_anchor() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange { vk: VirtualKey::Alt, down: true });
+    let actions = e.handle(Event::RightDown {
+        cursor: Point { x: 110, y: 110 }, // top-left of [100..300]
+        target: Some(default_target()),
+    });
+    assert!(actions.iter().any(|a| matches!(a,
+        Action::BeginDrag { mode: DragMode::Resize {
+            anchor: alt3rsnap::engine::geometry::ResizeAnchor::TopLeft,
+        }, .. })));
+    assert!(matches!(e.state(), State::Resizing { .. }));
+}
+
+#[test]
+fn armed_plus_right_down_in_center_picks_center_symmetric_anchor() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange { vk: VirtualKey::Alt, down: true });
+    let actions = e.handle(Event::RightDown {
+        cursor: Point { x: 200, y: 200 }, // center of [100..300]
+        target: Some(default_target()),
+    });
+    assert!(actions.iter().any(|a| matches!(a,
+        Action::BeginDrag { mode: DragMode::Resize {
+            anchor: alt3rsnap::engine::geometry::ResizeAnchor::CenterSymmetric,
+        }, .. })));
+}
+
+#[test]
+fn right_up_ends_resize_drag() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange { vk: VirtualKey::Alt, down: true });
+    e.handle(Event::RightDown { cursor: Point { x: 110, y: 110 }, target: Some(default_target()) });
+    e.handle(Event::RightUp);
+    assert!(matches!(e.state(), State::Armed));
+}

@@ -8,6 +8,7 @@ pub mod rules;
 pub mod state;
 
 use crate::engine::config::EngineConfig;
+use crate::engine::geometry::ResizeAnchor;
 use crate::engine::modifiers::Modifiers;
 use crate::engine::state::{Action, DragMode, Event, State};
 
@@ -102,6 +103,48 @@ impl Engine {
                     self.reconcile_arm_state(&mut actions);
                 }
             }
+            Event::RightDown { cursor, target } => {
+                if let State::Armed = self.state {
+                    if !self.config.enable_resize { return actions; }
+                    let Some(target) = target.clone() else { return actions; };
+                    if target.exclude { return actions; }
+
+                    let sector = crate::engine::geometry::pick_sector(
+                        target.initial_rect, *cursor, self.config.center_fraction,
+                    );
+                    let anchor = sector_to_anchor(sector);
+
+                    if self.config.raise_on_drag || self.config.policy.raise.matches(self.mods) {
+                        actions.push(Action::RaiseWindow { hwnd: target.hwnd });
+                    }
+
+                    actions.push(Action::BeginDrag {
+                        hwnd: target.hwnd,
+                        initial_rect: target.initial_rect,
+                        grab: *cursor,
+                        mode: DragMode::Resize { anchor },
+                    });
+                    actions.push(Action::SwallowEvent);
+
+                    self.state = State::Resizing {
+                        hwnd: target.hwnd,
+                        initial_rect: target.initial_rect,
+                        grab: *cursor,
+                        anchor,
+                        pending_passthrough: false,
+                    };
+                }
+            }
+            Event::RightUp => {
+                if let State::Resizing { hwnd, pending_passthrough, .. } = &self.state {
+                    let hwnd = *hwnd;
+                    let pp = *pending_passthrough;
+                    actions.push(Action::EndDrag { hwnd });
+                    actions.push(Action::CancelMenuActivation);
+                    self.state = if pp { State::PassThrough } else { State::Idle };
+                    self.reconcile_arm_state(&mut actions);
+                }
+            }
             _ => {}
         }
 
@@ -118,5 +161,20 @@ impl Engine {
             (State::Armed, false) => State::Idle,
             (other, _) => other,
         };
+    }
+}
+
+fn sector_to_anchor(s: crate::engine::geometry::Sector) -> ResizeAnchor {
+    use crate::engine::geometry::Sector::*;
+    match s {
+        TopLeft     => ResizeAnchor::TopLeft,
+        Top         => ResizeAnchor::Top,
+        TopRight    => ResizeAnchor::TopRight,
+        Left        => ResizeAnchor::Left,
+        Center      => ResizeAnchor::CenterSymmetric,
+        Right       => ResizeAnchor::Right,
+        BottomLeft  => ResizeAnchor::BottomLeft,
+        Bottom      => ResizeAnchor::Bottom,
+        BottomRight => ResizeAnchor::BottomRight,
     }
 }
