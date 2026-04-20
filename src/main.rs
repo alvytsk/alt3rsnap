@@ -1,7 +1,11 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 #[cfg(windows)]
+mod adapter;
+#[cfg(windows)]
 mod dpi;
+#[cfg(windows)]
+mod hook;
 #[cfg(windows)]
 mod tool_window;
 #[cfg(windows)]
@@ -10,7 +14,13 @@ mod win_api;
 #[cfg(windows)]
 fn main() {
     dpi::init();
-    if let Err(e) = tool_window::init_and_run() {
+    if let Err(e) = hook::install() {
+        eprintln!("hook install failed: {e}");
+        std::process::exit(1);
+    }
+    let result = tool_window::init_and_run();
+    hook::uninstall();
+    if let Err(e) = result {
         eprintln!("tool window error: {e}");
         std::process::exit(1);
     }
