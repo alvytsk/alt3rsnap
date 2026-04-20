@@ -79,6 +79,29 @@ impl Engine {
                     };
                 }
             }
+            Event::MouseMove { cursor } => {
+                if let State::Moving { hwnd, initial_rect, grab, .. } = &self.state {
+                    let delta = cursor.delta(*grab);
+                    actions.push(Action::UpdateDrag {
+                        hwnd: *hwnd,
+                        new_rect: initial_rect.translate_by(delta),
+                    });
+                } else if let State::Resizing { hwnd, initial_rect, grab, anchor, .. } = &self.state {
+                    let delta = cursor.delta(*grab);
+                    let new_rect = crate::engine::geometry::apply_resize(*initial_rect, *anchor, delta);
+                    actions.push(Action::UpdateDrag { hwnd: *hwnd, new_rect });
+                }
+            }
+            Event::LeftUp => {
+                if let State::Moving { hwnd, pending_passthrough, .. } = &self.state {
+                    let hwnd = *hwnd;
+                    let pp = *pending_passthrough;
+                    actions.push(Action::EndDrag { hwnd });
+                    actions.push(Action::CancelMenuActivation);
+                    self.state = if pp { State::PassThrough } else { State::Idle };
+                    self.reconcile_arm_state(&mut actions);
+                }
+            }
             _ => {}
         }
 
@@ -86,15 +109,14 @@ impl Engine {
     }
 
     fn reconcile_arm_state(&mut self, actions: &mut Vec<Action>) {
-        // Only Idle <-> Armed react to modifier changes; drag states ignore.
         let arm_matches = self.config.policy.arm.matches(self.mods);
-        self.state = match (&self.state, arm_matches) {
+        self.state = match (std::mem::replace(&mut self.state, State::Idle), arm_matches) {
             (State::Idle, true) => {
-                let _ = actions;  // no action for now; tray icon update in later task
+                let _ = actions;
                 State::Armed
             }
             (State::Armed, false) => State::Idle,
-            _ => std::mem::replace(&mut self.state, State::Idle),
+            (other, _) => other,
         };
     }
 }

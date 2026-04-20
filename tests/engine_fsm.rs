@@ -78,3 +78,39 @@ fn armed_plus_left_down_on_excluded_window_does_not_begin_drag() {
     assert!(actions.is_empty());
     assert!(matches!(e.state(), State::Armed));
 }
+
+#[test]
+fn mouse_move_during_moving_emits_update_drag() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange { vk: VirtualKey::Alt, down: true });
+    e.handle(Event::LeftDown { cursor: Point { x: 150, y: 150 }, target: Some(default_target()) });
+    let actions = e.handle(Event::MouseMove { cursor: Point { x: 170, y: 145 } });
+    assert_eq!(actions, &[Action::UpdateDrag {
+        hwnd: WindowId(1),
+        new_rect: Rect { left: 120, top: 95, right: 320, bottom: 295 },
+    }]);
+}
+
+#[test]
+fn left_up_ends_drag_and_returns_to_armed() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange { vk: VirtualKey::Alt, down: true });
+    e.handle(Event::LeftDown { cursor: Point { x: 150, y: 150 }, target: Some(default_target()) });
+    let actions = e.handle(Event::LeftUp);
+    assert!(actions.contains(&Action::EndDrag { hwnd: WindowId(1) }));
+    assert!(actions.contains(&Action::CancelMenuActivation));
+    assert!(matches!(e.state(), State::Armed));
+}
+
+#[test]
+fn left_up_returns_to_idle_if_modifier_released_during_drag() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange { vk: VirtualKey::Alt, down: true });
+    e.handle(Event::LeftDown { cursor: Point { x: 150, y: 150 }, target: Some(default_target()) });
+    // Release Alt mid-drag — drag continues; state stays Moving.
+    e.handle(Event::KeyChange { vk: VirtualKey::Alt, down: false });
+    assert!(matches!(e.state(), State::Moving { .. }));
+    // LeftUp — now arm policy no longer matches, so we go Idle.
+    e.handle(Event::LeftUp);
+    assert!(matches!(e.state(), State::Idle));
+}
