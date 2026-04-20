@@ -46,3 +46,44 @@ impl Rect {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sector {
+    TopLeft, Top, TopRight,
+    Left, Center, Right,
+    BottomLeft, Bottom, BottomRight,
+}
+
+/// Classify `cursor` into one of nine sectors of `rect`. `center_fraction` is the
+/// size of the center sector as a fraction of width/height (0.0..=1.0).
+/// Clamps out-of-rect cursors to the nearest sector.
+pub fn pick_sector(rect: Rect, cursor: Point, center_fraction: f32) -> Sector {
+    let cf = center_fraction.clamp(0.0, 1.0);
+    let side_width = (rect.width() as f32 * (1.0 - cf) / 2.0) as i32;
+    let side_height = (rect.height() as f32 * (1.0 - cf) / 2.0) as i32;
+
+    let left_edge = rect.left + side_width;
+    let right_edge = rect.right - side_width;
+    let top_edge = rect.top + side_height;
+    let bottom_edge = rect.bottom - side_height;
+
+    let col = if cursor.x < left_edge { 0 }
+              else if cursor.x >= right_edge { 2 }
+              else { 1 };
+    let row = if cursor.y < top_edge { 0 }
+              else if cursor.y >= bottom_edge { 2 }
+              else { 1 };
+
+    match (row, col) {
+        (0, 0) => Sector::TopLeft,
+        (0, 1) => Sector::Top,
+        (0, 2) => Sector::TopRight,
+        (1, 0) => Sector::Left,
+        (1, 1) => Sector::Center,
+        (1, 2) => Sector::Right,
+        (2, 0) => Sector::BottomLeft,
+        (2, 1) => Sector::Bottom,
+        (2, 2) => Sector::BottomRight,
+        _ => unreachable!(),
+    }
+}
