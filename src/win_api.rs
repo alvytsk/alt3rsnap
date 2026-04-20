@@ -147,3 +147,11 @@ pub unsafe fn cancel_menu_activation() {
 
 pub fn hwnd_to_id(hwnd: HWND) -> WindowId { WindowId(hwnd.0 as usize as u64) }
 pub fn id_to_hwnd(id: WindowId) -> HWND { HWND(id.0 as usize as *mut core::ffi::c_void) }
+
+pub unsafe fn window_under_cursor_hwnd(cursor: GPoint) -> Option<HWND> {
+    let mut hwnd = WindowFromPoint(to_win_point(cursor));
+    if hwnd.0.is_null() { return None; }
+    hwnd = GetAncestor(hwnd, GA_ROOT);
+    if hwnd.0.is_null() { return None; }
+    Some(hwnd)
+}

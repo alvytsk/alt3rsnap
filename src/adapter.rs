@@ -1,18 +1,62 @@
-//! Bridges engine `Action`s to Win32 calls via `win_api`, and resolves
-//! cursor positions into `DragTarget` records for the engine.
-
 #![cfg(target_os = "windows")]
 
 use alt3rsnap::engine::geometry::Point;
+use alt3rsnap::engine::rules::{evaluate, RuleAction};
 use alt3rsnap::engine::state::{Action, DragTarget};
+use crate::hook::ENGINE;
+use crate::win_api;
 
-pub unsafe fn resolve_target(_cursor: Point) -> Option<DragTarget> {
-    // Filled in Task 24.
-    None
+use windows::Win32::Foundation::HWND;
+
+pub unsafe fn resolve_target(cursor: Point) -> Option<DragTarget> {
+    let info = win_api::window_under_cursor(cursor)?;
+    let hwnd_raw = win_api::window_under_cursor_hwnd(cursor)?;
+
+    let exclude = ENGINE.with(|e| {
+        let eng = e.borrow();
+        matches!(evaluate(&eng.config().rules, &info), Some(RuleAction::Exclude))
+    });
+
+    let initial_rect = win_api::hwnd_rect(hwnd_raw)?;
+    let is_maximized = win_api::is_zoomed(hwnd_raw);
+
+    Some(DragTarget {
+        hwnd: win_api::hwnd_to_id(hwnd_raw),
+        initial_rect,
+        is_maximized,
+        exclude,
+    })
 }
 
-pub fn apply_actions(_actions: &[Action]) -> bool {
-    // Returns true if any action requested SwallowEvent.
-    // Filled in Task 24.
-    false
+pub fn apply_actions(actions: &[Action]) -> bool {
+    let mut swallow = false;
+    for a in actions {
+        match a {
+            Action::BeginDrag { hwnd, .. } => unsafe {
+                let h: HWND = win_api::id_to_hwnd(*hwnd);
+                // SetCapture handled via win_api::capture_mouse in Task 25.
+                let _ = h;
+            },
+            Action::UpdateDrag { hwnd, new_rect } => unsafe {
+                win_api::set_window_rect(win_api::id_to_hwnd(*hwnd), *new_rect);
+            },
+            Action::EndDrag { .. } => {
+                // Release any captured mouse (wired in Task 25).
+            }
+            Action::RestoreIfMaximized { hwnd, .. } => unsafe {
+                win_api::restore(win_api::id_to_hwnd(*hwnd));
+            },
+            Action::RaiseWindow { hwnd } => unsafe {
+                win_api::raise(win_api::id_to_hwnd(*hwnd));
+            },
+            Action::CancelMenuActivation => unsafe {
+                win_api::cancel_menu_activation();
+            },
+            Action::SwallowEvent => { swallow = true; }
+            Action::UpdateTrayIcon { .. } => {
+                // Wired in Task 27 (tray).
+            }
+        }
+    }
+    swallow
 }
