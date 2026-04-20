@@ -194,3 +194,13 @@ fn passthrough_ignores_mouse_events() {
     let actions = e.handle(Event::LeftDown { cursor: Point { x: 1, y: 1 }, target: Some(default_target()) });
     assert!(actions.is_empty());
 }
+
+#[test]
+fn set_config_disabling_stops_engine() {
+    let mut e = Engine::new(EngineConfig::default());
+    let mut cfg = EngineConfig::default();
+    cfg.enabled = false;
+    let acts = e.set_config(cfg);
+    assert!(matches!(e.state(), State::Disabled));
+    assert!(acts.contains(&Action::UpdateTrayIcon { enabled: false }));
+}

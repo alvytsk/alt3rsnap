@@ -216,6 +216,28 @@ impl Engine {
             (other, _) => other,
         };
     }
+
+    /// Replace the current config (hot reload from tray). Preserves state except that
+    /// if the new config's `enabled=false` we transition to Disabled; if toggled back
+    /// on, we transition to Idle and re-evaluate modifiers.
+    pub fn set_config(&mut self, cfg: EngineConfig) -> Vec<Action> {
+        let mut actions = Vec::new();
+        let was_enabled = !matches!(self.state, State::Disabled);
+        self.config = cfg;
+        if self.config.enabled && !was_enabled {
+            self.state = State::Idle;
+            self.reconcile_arm_state(&mut actions);
+            actions.push(Action::UpdateTrayIcon { enabled: true });
+        } else if !self.config.enabled && was_enabled {
+            if let State::Moving { hwnd, .. } | State::Resizing { hwnd, .. } = &self.state {
+                actions.push(Action::EndDrag { hwnd: *hwnd });
+                actions.push(Action::CancelMenuActivation);
+            }
+            self.state = State::Disabled;
+            actions.push(Action::UpdateTrayIcon { enabled: false });
+        }
+        actions
+    }
 }
 
 fn sector_to_anchor(s: crate::engine::geometry::Sector) -> ResizeAnchor {
