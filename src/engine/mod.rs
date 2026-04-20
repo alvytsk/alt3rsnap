@@ -9,7 +9,7 @@ pub mod state;
 
 use crate::engine::config::EngineConfig;
 use crate::engine::modifiers::Modifiers;
-use crate::engine::state::{Action, Event, State};
+use crate::engine::state::{Action, DragMode, Event, State};
 
 pub struct Engine {
     state: State,
@@ -42,7 +42,44 @@ impl Engine {
                 }
                 self.reconcile_arm_state(&mut actions);
             }
-            _ => {} // other events handled in later tasks
+            Event::LeftDown { cursor, target } => {
+                if let State::Armed = self.state {
+                    if !self.config.enable_move { return actions; }
+                    let Some(target) = target.clone() else { return actions; };
+                    if target.exclude { return actions; }
+
+                    if target.is_maximized && self.config.restore_maximized_on_move {
+                        actions.push(Action::RestoreIfMaximized {
+                            hwnd: target.hwnd,
+                            cursor: *cursor,
+                        });
+                        // After restore, the adapter will re-populate initial_rect in a
+                        // follow-up LeftDown with is_maximized=false. For simplicity we
+                        // still begin the drag immediately; the adapter is responsible
+                        // for handing us a restored rect before BeginDrag executes.
+                    }
+
+                    if self.config.raise_on_drag || self.config.policy.raise.matches(self.mods) {
+                        actions.push(Action::RaiseWindow { hwnd: target.hwnd });
+                    }
+
+                    actions.push(Action::BeginDrag {
+                        hwnd: target.hwnd,
+                        initial_rect: target.initial_rect,
+                        grab: *cursor,
+                        mode: DragMode::Move,
+                    });
+                    actions.push(Action::SwallowEvent);
+
+                    self.state = State::Moving {
+                        hwnd: target.hwnd,
+                        initial_rect: target.initial_rect,
+                        grab: *cursor,
+                        pending_passthrough: false,
+                    };
+                }
+            }
+            _ => {}
         }
 
         actions
