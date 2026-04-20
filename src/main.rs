@@ -2,6 +2,8 @@
 
 #[cfg(windows)]
 mod dpi;
+#[cfg(windows)]
+mod win_api;
 
 #[cfg(windows)]
 fn main() {
