@@ -1,2 +1,8 @@
 //! Engine: pure Rust, no `windows` crate imports.
-//! Fleshed out in Phase 1 / Phase 2.
+
+pub mod config;
+pub mod geometry;
+pub mod modifiers;
+pub mod policy;
+pub mod rules;
+pub mod state;
