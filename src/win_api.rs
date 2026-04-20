@@ -9,11 +9,13 @@ use alt3rsnap::engine::state::WindowId;
 use windows::core::PWSTR;
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
-use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
-    PROCESS_NAME_FORMAT,
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+};
+use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GetAncestor, GetClassNameW, GetWindowLongPtrW, GetWindowRect,
     GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsZoomed, SetForegroundWindow,
@@ -21,24 +23,36 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SWP_NOACTIVATE, SWP_NOSENDCHANGING, SWP_NOZORDER, SW_RESTORE, WINDOW_EX_STYLE, WINDOW_STYLE,
     WS_CAPTION, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_OVERLAPPEDWINDOW,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, ReleaseCapture, SetCapture};
 
-pub fn to_win_point(p: GPoint) -> POINT { POINT { x: p.x, y: p.y } }
+pub fn to_win_point(p: GPoint) -> POINT {
+    POINT { x: p.x, y: p.y }
+}
 pub fn from_win_rect(r: RECT) -> GRect {
-    GRect { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
+    GRect {
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+    }
 }
 
 pub unsafe fn window_under_cursor(cursor: GPoint) -> Option<WindowInfo> {
     let mut hwnd = WindowFromPoint(to_win_point(cursor));
-    if hwnd.0.is_null() { return None; }
+    if hwnd.0.is_null() {
+        return None;
+    }
     hwnd = GetAncestor(hwnd, GA_ROOT);
-    if hwnd.0.is_null() { return None; }
+    if hwnd.0.is_null() {
+        return None;
+    }
     collect_window_info(hwnd)
 }
 
 pub unsafe fn collect_window_info(hwnd: HWND) -> Option<WindowInfo> {
     let class = read_class_name(hwnd)?;
-    if SKIP_CLASSES.iter().any(|c| *c == class) { return None; }
+    if SKIP_CLASSES.iter().any(|c| *c == class) {
+        return None;
+    }
     let title = read_window_text(hwnd);
     let process = read_process_basename(hwnd)?;
     let traits = read_window_traits(hwnd);
@@ -51,20 +65,27 @@ pub unsafe fn collect_window_info(hwnd: HWND) -> Option<WindowInfo> {
 }
 
 const SKIP_CLASSES: &[&str] = &[
-    "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd",
+    "Progman",
+    "WorkerW",
+    "Shell_TrayWnd",
+    "Shell_SecondaryTrayWnd",
     "Button", // desktop's "Show Desktop" button
 ];
 
 unsafe fn read_class_name(hwnd: HWND) -> Option<String> {
     let mut buf = [0u16; 256];
     let n = GetClassNameW(hwnd, &mut buf);
-    if n <= 0 { return None; }
+    if n <= 0 {
+        return None;
+    }
     Some(String::from_utf16_lossy(&buf[..n as usize]))
 }
 
 unsafe fn read_window_text(hwnd: HWND) -> String {
     let n = GetWindowTextLengthW(hwnd);
-    if n <= 0 { return String::new(); }
+    if n <= 0 {
+        return String::new();
+    }
     let mut buf = vec![0u16; (n + 1) as usize];
     let got = GetWindowTextW(hwnd, &mut buf);
     String::from_utf16_lossy(&buf[..got as usize])
@@ -73,7 +94,9 @@ unsafe fn read_window_text(hwnd: HWND) -> String {
 unsafe fn read_process_basename(hwnd: HWND) -> Option<String> {
     let mut pid: u32 = 0;
     GetWindowThreadProcessId(hwnd, Some(&mut pid));
-    if pid == 0 { return None; }
+    if pid == 0 {
+        return None;
+    }
     let proc_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
     let mut buf = [0u16; 1024];
     let mut size: u32 = buf.len() as u32;
@@ -82,14 +105,19 @@ unsafe fn read_process_basename(hwnd: HWND) -> Option<String> {
         PROCESS_NAME_FORMAT(0),
         PWSTR(buf.as_mut_ptr()),
         &mut size,
-    ).is_ok();
+    )
+    .is_ok();
     let _ = windows::Win32::Foundation::CloseHandle(proc_handle);
-    if !ok { return None; }
+    if !ok {
+        return None;
+    }
     let full = String::from_utf16_lossy(&buf[..size as usize]);
-    Some(std::path::Path::new(&full)
-        .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or(full))
+    Some(
+        std::path::Path::new(&full)
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or(full),
+    )
 }
 
 unsafe fn read_window_traits(hwnd: HWND) -> WindowTraits {
@@ -107,8 +135,8 @@ unsafe fn read_window_traits(hwnd: HWND) -> WindowTraits {
     WindowTraits {
         is_topmost: (ex_style.0 & WS_EX_TOPMOST.0) != 0,
         is_cloaked: cloaked != 0,
-        is_tool:    (ex_style.0 & WS_EX_TOOLWINDOW.0) != 0,
-        is_owned:   false, // populate later if needed
+        is_tool: (ex_style.0 & WS_EX_TOOLWINDOW.0) != 0,
+        is_owned: false, // populate later if needed
     }
 }
 
@@ -120,15 +148,24 @@ pub unsafe fn hwnd_rect(hwnd: HWND) -> Option<GRect> {
 
 pub unsafe fn set_window_rect(hwnd: HWND, rect: GRect) -> bool {
     SetWindowPos(
-        hwnd, HWND_TOP,
-        rect.left, rect.top, rect.width(), rect.height(),
+        hwnd,
+        HWND_TOP,
+        rect.left,
+        rect.top,
+        rect.width(),
+        rect.height(),
         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING,
-    ).is_ok()
+    )
+    .is_ok()
 }
 
-pub unsafe fn is_zoomed(hwnd: HWND) -> bool { IsZoomed(hwnd).as_bool() }
+pub unsafe fn is_zoomed(hwnd: HWND) -> bool {
+    IsZoomed(hwnd).as_bool()
+}
 
-pub unsafe fn restore(hwnd: HWND) { let _ = ShowWindow(hwnd, SW_RESTORE); }
+pub unsafe fn restore(hwnd: HWND) {
+    let _ = ShowWindow(hwnd, SW_RESTORE);
+}
 
 pub unsafe fn raise(hwnd: HWND) {
     let _ = BringWindowToTop(hwnd);
@@ -138,19 +175,36 @@ pub unsafe fn raise(hwnd: HWND) {
 pub unsafe fn cancel_menu_activation() {
     // Send a harmless key (VK_F18 = 0x87) up-down to swallow Alt-triggered menu focus.
     keybd_event(0x87, 0, Default::default(), 0);
-    keybd_event(0x87, 0, windows::Win32::UI::Input::KeyboardAndMouse::KEYEVENTF_KEYUP, 0);
+    keybd_event(
+        0x87,
+        0,
+        windows::Win32::UI::Input::KeyboardAndMouse::KEYEVENTF_KEYUP,
+        0,
+    );
 }
 
-pub fn hwnd_to_id(hwnd: HWND) -> WindowId { WindowId(hwnd.0 as usize as u64) }
-pub fn id_to_hwnd(id: WindowId) -> HWND { HWND(id.0 as usize as *mut core::ffi::c_void) }
+pub fn hwnd_to_id(hwnd: HWND) -> WindowId {
+    WindowId(hwnd.0 as usize as u64)
+}
+pub fn id_to_hwnd(id: WindowId) -> HWND {
+    HWND(id.0 as usize as *mut core::ffi::c_void)
+}
 
 pub unsafe fn window_under_cursor_hwnd(cursor: GPoint) -> Option<HWND> {
     let mut hwnd = WindowFromPoint(to_win_point(cursor));
-    if hwnd.0.is_null() { return None; }
+    if hwnd.0.is_null() {
+        return None;
+    }
     hwnd = GetAncestor(hwnd, GA_ROOT);
-    if hwnd.0.is_null() { return None; }
+    if hwnd.0.is_null() {
+        return None;
+    }
     Some(hwnd)
 }
 
-pub unsafe fn capture_mouse(tool_hwnd: HWND) { let _ = SetCapture(tool_hwnd); }
-pub unsafe fn release_mouse() { let _ = ReleaseCapture(); }
+pub unsafe fn capture_mouse(tool_hwnd: HWND) {
+    let _ = SetCapture(tool_hwnd);
+}
+pub unsafe fn release_mouse() {
+    let _ = ReleaseCapture();
+}

@@ -18,7 +18,7 @@ impl Default for ActivationPolicy {
         ActivationPolicy {
             arm: ModMatcher {
                 required: Modifiers::ALT,
-                forbidden: Modifiers::WIN,  // avoid conflict with Win+drag snap
+                forbidden: Modifiers::WIN, // avoid conflict with Win+drag snap
                 exact: false,
             },
             raise: ModMatcher {

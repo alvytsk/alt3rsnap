@@ -44,17 +44,28 @@ pub struct DragTarget {
     pub hwnd: WindowId,
     pub initial_rect: Rect,
     pub is_maximized: bool,
-    pub exclude: bool,          // precomputed by adapter from rule engine
+    pub exclude: bool, // precomputed by adapter from rule engine
 }
 
 #[derive(Debug, Clone)]
 pub enum Event {
-    KeyChange { vk: VirtualKey, down: bool },
-    LeftDown  { cursor: Point, target: Option<DragTarget> },
+    KeyChange {
+        vk: VirtualKey,
+        down: bool,
+    },
+    LeftDown {
+        cursor: Point,
+        target: Option<DragTarget>,
+    },
     LeftUp,
-    RightDown { cursor: Point, target: Option<DragTarget> },
+    RightDown {
+        cursor: Point,
+        target: Option<DragTarget>,
+    },
     RightUp,
-    MouseMove { cursor: Point },
+    MouseMove {
+        cursor: Point,
+    },
     FullscreenFocused,
     FullscreenUnfocused,
     ToggleEnable,
@@ -74,22 +85,34 @@ pub enum Action {
         grab: Point,
         mode: DragMode,
     },
-    UpdateDrag { hwnd: WindowId, new_rect: Rect },
-    EndDrag { hwnd: WindowId },
-    RestoreIfMaximized { hwnd: WindowId, cursor: Point },
-    RaiseWindow { hwnd: WindowId },
+    UpdateDrag {
+        hwnd: WindowId,
+        new_rect: Rect,
+    },
+    EndDrag {
+        hwnd: WindowId,
+    },
+    RestoreIfMaximized {
+        hwnd: WindowId,
+        cursor: Point,
+    },
+    RaiseWindow {
+        hwnd: WindowId,
+    },
     CancelMenuActivation,
     SwallowEvent,
-    UpdateTrayIcon { enabled: bool },
+    UpdateTrayIcon {
+        enabled: bool,
+    },
 }
 
 /// Current modifier state snapshot; updated inline by the engine.
 pub fn vk_bit(vk: VirtualKey) -> Modifiers {
     match vk {
-        VirtualKey::Alt   => Modifiers::ALT,
-        VirtualKey::Ctrl  => Modifiers::CTRL,
+        VirtualKey::Alt => Modifiers::ALT,
+        VirtualKey::Ctrl => Modifiers::CTRL,
         VirtualKey::Shift => Modifiers::SHIFT,
-        VirtualKey::Win   => Modifiers::WIN,
+        VirtualKey::Win => Modifiers::WIN,
         VirtualKey::Space => Modifiers::SPACE,
         VirtualKey::Other(_) => Modifiers::NONE,
     }

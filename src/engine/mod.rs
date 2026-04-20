@@ -21,15 +21,25 @@ pub struct Engine {
 impl Engine {
     pub fn new(config: EngineConfig) -> Self {
         Engine {
-            state: if config.enabled { State::Idle } else { State::Disabled },
+            state: if config.enabled {
+                State::Idle
+            } else {
+                State::Disabled
+            },
             mods: Modifiers::NONE,
             config,
         }
     }
 
-    pub fn state(&self) -> &State { &self.state }
-    pub fn mods(&self) -> Modifiers { self.mods }
-    pub fn config(&self) -> &EngineConfig { &self.config }
+    pub fn state(&self) -> &State {
+        &self.state
+    }
+    pub fn mods(&self) -> Modifiers {
+        self.mods
+    }
+    pub fn config(&self) -> &EngineConfig {
+        &self.config
+    }
 
     /// Process one event; return actions for the adapter to execute.
     pub fn handle(&mut self, event: Event) -> Vec<Action> {
@@ -40,7 +50,11 @@ impl Engine {
             if let Event::KeyChange { vk, down } = &event {
                 let bit = crate::engine::state::vk_bit(*vk);
                 if !bit.is_empty() {
-                    self.mods = if *down { self.mods.with(bit) } else { self.mods.without(bit) };
+                    self.mods = if *down {
+                        self.mods.with(bit)
+                    } else {
+                        self.mods.without(bit)
+                    };
                 }
             }
             // ToggleEnable and FullscreenFocused/FullscreenUnfocused still need to be processed.
@@ -56,15 +70,25 @@ impl Engine {
             Event::KeyChange { vk, down } => {
                 let bit = crate::engine::state::vk_bit(*vk);
                 if !bit.is_empty() {
-                    self.mods = if *down { self.mods.with(bit) } else { self.mods.without(bit) };
+                    self.mods = if *down {
+                        self.mods.with(bit)
+                    } else {
+                        self.mods.without(bit)
+                    };
                 }
                 self.reconcile_arm_state(&mut actions);
             }
             Event::LeftDown { cursor, target } => {
                 if let State::Armed = self.state {
-                    if !self.config.enable_move { return actions; }
-                    let Some(target) = target.clone() else { return actions; };
-                    if target.exclude { return actions; }
+                    if !self.config.enable_move {
+                        return actions;
+                    }
+                    let Some(target) = target.clone() else {
+                        return actions;
+                    };
+                    if target.exclude {
+                        return actions;
+                    }
 
                     if target.is_maximized && self.config.restore_maximized_on_move {
                         actions.push(Action::RestoreIfMaximized {
@@ -98,20 +122,42 @@ impl Engine {
                 }
             }
             Event::MouseMove { cursor } => {
-                if let State::Moving { hwnd, initial_rect, grab, .. } = &self.state {
+                if let State::Moving {
+                    hwnd,
+                    initial_rect,
+                    grab,
+                    ..
+                } = &self.state
+                {
                     let delta = cursor.delta(*grab);
                     actions.push(Action::UpdateDrag {
                         hwnd: *hwnd,
                         new_rect: initial_rect.translate_by(delta),
                     });
-                } else if let State::Resizing { hwnd, initial_rect, grab, anchor, .. } = &self.state {
+                } else if let State::Resizing {
+                    hwnd,
+                    initial_rect,
+                    grab,
+                    anchor,
+                    ..
+                } = &self.state
+                {
                     let delta = cursor.delta(*grab);
-                    let new_rect = crate::engine::geometry::apply_resize(*initial_rect, *anchor, delta);
-                    actions.push(Action::UpdateDrag { hwnd: *hwnd, new_rect });
+                    let new_rect =
+                        crate::engine::geometry::apply_resize(*initial_rect, *anchor, delta);
+                    actions.push(Action::UpdateDrag {
+                        hwnd: *hwnd,
+                        new_rect,
+                    });
                 }
             }
             Event::LeftUp => {
-                if let State::Moving { hwnd, pending_passthrough, .. } = &self.state {
+                if let State::Moving {
+                    hwnd,
+                    pending_passthrough,
+                    ..
+                } = &self.state
+                {
                     let hwnd = *hwnd;
                     let pp = *pending_passthrough;
                     actions.push(Action::EndDrag { hwnd });
@@ -122,12 +168,20 @@ impl Engine {
             }
             Event::RightDown { cursor, target } => {
                 if let State::Armed = self.state {
-                    if !self.config.enable_resize { return actions; }
-                    let Some(target) = target.clone() else { return actions; };
-                    if target.exclude { return actions; }
+                    if !self.config.enable_resize {
+                        return actions;
+                    }
+                    let Some(target) = target.clone() else {
+                        return actions;
+                    };
+                    if target.exclude {
+                        return actions;
+                    }
 
                     let sector = crate::engine::geometry::pick_sector(
-                        target.initial_rect, *cursor, self.config.center_fraction,
+                        target.initial_rect,
+                        *cursor,
+                        self.config.center_fraction,
                     );
                     let anchor = sector_to_anchor(sector);
 
@@ -153,7 +207,12 @@ impl Engine {
                 }
             }
             Event::RightUp => {
-                if let State::Resizing { hwnd, pending_passthrough, .. } = &self.state {
+                if let State::Resizing {
+                    hwnd,
+                    pending_passthrough,
+                    ..
+                } = &self.state
+                {
                     let hwnd = *hwnd;
                     let pp = *pending_passthrough;
                     actions.push(Action::EndDrag { hwnd });
@@ -162,41 +221,52 @@ impl Engine {
                     self.reconcile_arm_state(&mut actions);
                 }
             }
-            Event::ToggleEnable => {
-                match std::mem::replace(&mut self.state, State::Idle) {
-                    State::Disabled => {
-                        self.state = State::Idle;
-                        self.reconcile_arm_state(&mut actions);
-                        actions.push(Action::UpdateTrayIcon { enabled: true });
-                    }
-                    State::Moving { hwnd, .. } | State::Resizing { hwnd, .. } => {
-                        actions.push(Action::EndDrag { hwnd });
-                        actions.push(Action::CancelMenuActivation);
-                        self.state = State::Disabled;
-                        actions.push(Action::UpdateTrayIcon { enabled: false });
-                    }
-                    _other => {
-                        self.state = State::Disabled;
-                        actions.push(Action::UpdateTrayIcon { enabled: false });
-                    }
+            Event::ToggleEnable => match std::mem::replace(&mut self.state, State::Idle) {
+                State::Disabled => {
+                    self.state = State::Idle;
+                    self.reconcile_arm_state(&mut actions);
+                    actions.push(Action::UpdateTrayIcon { enabled: true });
                 }
-            }
-            Event::FullscreenFocused => {
-                match &mut self.state {
-                    State::Idle | State::Armed => { self.state = State::PassThrough; }
-                    State::Moving { pending_passthrough, .. }
-                    | State::Resizing { pending_passthrough, .. } => {
-                        *pending_passthrough = true;
-                    }
-                    _ => {}
+                State::Moving { hwnd, .. } | State::Resizing { hwnd, .. } => {
+                    actions.push(Action::EndDrag { hwnd });
+                    actions.push(Action::CancelMenuActivation);
+                    self.state = State::Disabled;
+                    actions.push(Action::UpdateTrayIcon { enabled: false });
                 }
-            }
+                _other => {
+                    self.state = State::Disabled;
+                    actions.push(Action::UpdateTrayIcon { enabled: false });
+                }
+            },
+            Event::FullscreenFocused => match &mut self.state {
+                State::Idle | State::Armed => {
+                    self.state = State::PassThrough;
+                }
+                State::Moving {
+                    pending_passthrough,
+                    ..
+                }
+                | State::Resizing {
+                    pending_passthrough,
+                    ..
+                } => {
+                    *pending_passthrough = true;
+                }
+                _ => {}
+            },
             Event::FullscreenUnfocused => {
                 if let State::PassThrough = self.state {
                     self.state = State::Idle;
                     self.reconcile_arm_state(&mut actions);
-                } else if let State::Moving { pending_passthrough, .. }
-                    | State::Resizing { pending_passthrough, .. } = &mut self.state {
+                } else if let State::Moving {
+                    pending_passthrough,
+                    ..
+                }
+                | State::Resizing {
+                    pending_passthrough,
+                    ..
+                } = &mut self.state
+                {
                     *pending_passthrough = false;
                 }
             }
@@ -243,14 +313,14 @@ impl Engine {
 fn sector_to_anchor(s: crate::engine::geometry::Sector) -> ResizeAnchor {
     use crate::engine::geometry::Sector::*;
     match s {
-        TopLeft     => ResizeAnchor::TopLeft,
-        Top         => ResizeAnchor::Top,
-        TopRight    => ResizeAnchor::TopRight,
-        Left        => ResizeAnchor::Left,
-        Center      => ResizeAnchor::CenterSymmetric,
-        Right       => ResizeAnchor::Right,
-        BottomLeft  => ResizeAnchor::BottomLeft,
-        Bottom      => ResizeAnchor::Bottom,
+        TopLeft => ResizeAnchor::TopLeft,
+        Top => ResizeAnchor::Top,
+        TopRight => ResizeAnchor::TopRight,
+        Left => ResizeAnchor::Left,
+        Center => ResizeAnchor::CenterSymmetric,
+        Right => ResizeAnchor::Right,
+        BottomLeft => ResizeAnchor::BottomLeft,
+        Bottom => ResizeAnchor::Bottom,
         BottomRight => ResizeAnchor::BottomRight,
     }
 }

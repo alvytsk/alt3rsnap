@@ -1,5 +1,5 @@
 use alt3rsnap::engine::rules::{
-    Pattern, RuleAction, WindowInfo, WindowRule, WindowTraitMask, WindowTraits, evaluate,
+    evaluate, Pattern, RuleAction, WindowInfo, WindowRule, WindowTraitMask, WindowTraits,
 };
 
 fn info(process: &str, class: &str, title: &str) -> WindowInfo {
@@ -20,7 +20,10 @@ fn process_exact_match_excludes() {
         match_traits: WindowTraitMask::default(),
         action: RuleAction::Exclude,
     }];
-    assert_eq!(evaluate(&rules, &info("mstsc.exe", "", "")), Some(&RuleAction::Exclude));
+    assert_eq!(
+        evaluate(&rules, &info("mstsc.exe", "", "")),
+        Some(&RuleAction::Exclude)
+    );
     assert_eq!(evaluate(&rules, &info("notepad.exe", "", "")), None);
 }
 
@@ -33,7 +36,10 @@ fn process_exact_is_case_insensitive() {
         match_traits: WindowTraitMask::default(),
         action: RuleAction::Exclude,
     }];
-    assert_eq!(evaluate(&rules, &info("mstsc.exe", "", "")), Some(&RuleAction::Exclude));
+    assert_eq!(
+        evaluate(&rules, &info("mstsc.exe", "", "")),
+        Some(&RuleAction::Exclude)
+    );
 }
 
 #[test]
@@ -45,7 +51,10 @@ fn glob_matches_prefix() {
         match_traits: WindowTraitMask::default(),
         action: RuleAction::Exclude,
     }];
-    assert_eq!(evaluate(&rules, &info("game_foo.exe", "", "")), Some(&RuleAction::Exclude));
+    assert_eq!(
+        evaluate(&rules, &info("game_foo.exe", "", "")),
+        Some(&RuleAction::Exclude)
+    );
     assert_eq!(evaluate(&rules, &info("foo.exe", "", "")), None);
 }
 
@@ -67,7 +76,10 @@ fn first_matching_rule_wins() {
             action: RuleAction::Exclude,
         },
     ];
-    assert_eq!(evaluate(&rules, &info("notepad.exe", "", "")), Some(&RuleAction::IncludeOnly));
+    assert_eq!(
+        evaluate(&rules, &info("notepad.exe", "", "")),
+        Some(&RuleAction::IncludeOnly)
+    );
 }
 
 #[test]
@@ -79,9 +91,15 @@ fn class_and_title_both_required_to_match() {
         match_traits: WindowTraitMask::default(),
         action: RuleAction::Exclude,
     }];
-    assert_eq!(evaluate(&rules, &info("x.exe", "MyClass", "MyTitle")), Some(&RuleAction::Exclude));
+    assert_eq!(
+        evaluate(&rules, &info("x.exe", "MyClass", "MyTitle")),
+        Some(&RuleAction::Exclude)
+    );
     assert_eq!(evaluate(&rules, &info("x.exe", "MyClass", "Other")), None);
-    assert_eq!(evaluate(&rules, &info("x.exe", "OtherClass", "MyTitle")), None);
+    assert_eq!(
+        evaluate(&rules, &info("x.exe", "OtherClass", "MyTitle")),
+        None
+    );
 }
 
 #[test]
@@ -90,7 +108,10 @@ fn trait_mask_require_topmost_filters() {
         match_process: None,
         match_class: None,
         match_title: None,
-        match_traits: WindowTraitMask { require_topmost: Some(true), ..Default::default() },
+        match_traits: WindowTraitMask {
+            require_topmost: Some(true),
+            ..Default::default()
+        },
         action: RuleAction::Exclude,
     }];
     let mut topmost = info("x.exe", "", "");

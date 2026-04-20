@@ -7,9 +7,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::Shell::{
-    NOTIFYICONDATAW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP,
-    NIIF_WARNING, NIM_ADD, NIM_DELETE, NIM_MODIFY,
-    Shell_NotifyIconW,
+    Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_WARNING, NIM_ADD, NIM_DELETE,
+    NIM_MODIFY, NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, LoadIconW, SetForegroundWindow,
@@ -23,14 +22,14 @@ use alt3rsnap::engine::state::{Event as EngineEvent, State};
 pub const WM_TRAY_CALLBACK: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 1;
 
 const ID_TOGGLE_ENABLED: u32 = 100;
-const ID_OPEN_CONFIG: u32    = 101;
-const ID_RELOAD_CONFIG: u32  = 102;
+const ID_OPEN_CONFIG: u32 = 101;
+const ID_RELOAD_CONFIG: u32 = 102;
 const ID_AUTOSTART_NORMAL: u32 = 103;
 const ID_AUTOSTART_ELEVATED: u32 = 104;
 const ID_RESTART_ELEVATED: u32 = 105;
-const ID_RESTART_NORMAL: u32   = 106;
+const ID_RESTART_NORMAL: u32 = 106;
 const ID_ABOUT: u32 = 107;
-const ID_EXIT: u32  = 108;
+const ID_EXIT: u32 = 108;
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -87,7 +86,9 @@ fn toggle_enabled() {
     );
 }
 
-pub fn set_enabled_flag(enabled: bool) { ENABLED.store(enabled, Ordering::SeqCst); }
+pub fn set_enabled_flag(enabled: bool) {
+    ENABLED.store(enabled, Ordering::SeqCst);
+}
 
 pub fn show_balloon(title: &str, text: &str) {
     unsafe {
@@ -99,8 +100,12 @@ pub fn show_balloon(title: &str, text: &str) {
             uFlags: NIF_INFO,
             ..Default::default()
         };
-        for (i, c) in title.encode_utf16().enumerate().take(63) { nid.szInfoTitle[i] = c; }
-        for (i, c) in text.encode_utf16().enumerate().take(255)  { nid.szInfo[i] = c; }
+        for (i, c) in title.encode_utf16().enumerate().take(63) {
+            nid.szInfoTitle[i] = c;
+        }
+        for (i, c) in text.encode_utf16().enumerate().take(255) {
+            nid.szInfo[i] = c;
+        }
         nid.dwInfoFlags = NIIF_WARNING;
         let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
@@ -110,20 +115,54 @@ fn show_menu(hwnd: HWND) {
     unsafe {
         let menu = CreatePopupMenu().unwrap();
         let enabled = ENABLED.load(Ordering::SeqCst);
-        let _ = AppendMenuW(menu, if enabled { MF_CHECKED } else { MF_UNCHECKED } | MF_STRING,
-                            ID_TOGGLE_ENABLED as usize, w!("Enabled"));
+        let _ = AppendMenuW(
+            menu,
+            if enabled { MF_CHECKED } else { MF_UNCHECKED } | MF_STRING,
+            ID_TOGGLE_ENABLED as usize,
+            w!("Enabled"),
+        );
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-        let _ = AppendMenuW(menu, MF_STRING, ID_AUTOSTART_NORMAL as usize, w!("Autostart on logon"));
-        let _ = AppendMenuW(menu, MF_STRING, ID_AUTOSTART_ELEVATED as usize, w!("Autostart as elevated"));
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            ID_AUTOSTART_NORMAL as usize,
+            w!("Autostart on logon"),
+        );
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            ID_AUTOSTART_ELEVATED as usize,
+            w!("Autostart as elevated"),
+        );
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         if crate::elevate::is_elevated() {
-            let _ = AppendMenuW(menu, MF_STRING, ID_RESTART_NORMAL as usize, w!("Restart normally"));
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                ID_RESTART_NORMAL as usize,
+                w!("Restart normally"),
+            );
         } else {
-            let _ = AppendMenuW(menu, MF_STRING, ID_RESTART_ELEVATED as usize, w!("Restart elevated"));
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                ID_RESTART_ELEVATED as usize,
+                w!("Restart elevated"),
+            );
         }
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-        let _ = AppendMenuW(menu, MF_STRING, ID_OPEN_CONFIG as usize, w!("Open config file"));
-        let _ = AppendMenuW(menu, MF_STRING, ID_RELOAD_CONFIG as usize, w!("Reload config"));
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            ID_OPEN_CONFIG as usize,
+            w!("Open config file"),
+        );
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            ID_RELOAD_CONFIG as usize,
+            w!("Reload config"),
+        );
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING, ID_ABOUT as usize, w!("About\u{2026}"));
         let _ = AppendMenuW(menu, MF_STRING, ID_EXIT as usize, w!("Exit"));
@@ -139,14 +178,30 @@ fn show_menu(hwnd: HWND) {
 pub fn on_command(id: u32) {
     match id {
         ID_TOGGLE_ENABLED => toggle_enabled(),
-        ID_OPEN_CONFIG     => { crate::config_ops::open_in_editor(); }
-        ID_RELOAD_CONFIG   => { crate::config_ops::reload(); }
-        ID_AUTOSTART_NORMAL => { crate::autostart::toggle_normal(); }
-        ID_AUTOSTART_ELEVATED => { crate::autostart::toggle_elevated(); }
-        ID_RESTART_ELEVATED => { crate::elevate::restart_elevated(); }
-        ID_RESTART_NORMAL   => { crate::elevate::restart_normal(); }
-        ID_ABOUT  => { show_about(); }
-        ID_EXIT   => unsafe { windows::Win32::UI::WindowsAndMessaging::PostQuitMessage(0); },
+        ID_OPEN_CONFIG => {
+            crate::config_ops::open_in_editor();
+        }
+        ID_RELOAD_CONFIG => {
+            crate::config_ops::reload();
+        }
+        ID_AUTOSTART_NORMAL => {
+            crate::autostart::toggle_normal();
+        }
+        ID_AUTOSTART_ELEVATED => {
+            crate::autostart::toggle_elevated();
+        }
+        ID_RESTART_ELEVATED => {
+            crate::elevate::restart_elevated();
+        }
+        ID_RESTART_NORMAL => {
+            crate::elevate::restart_normal();
+        }
+        ID_ABOUT => {
+            show_about();
+        }
+        ID_EXIT => unsafe {
+            windows::Win32::UI::WindowsAndMessaging::PostQuitMessage(0);
+        },
         _ => {}
     }
 }
@@ -156,7 +211,11 @@ fn show_about() {
         let text = format!(
             "Alt3rSnap v{}\nIntegrity level: {}\nhttps://github.com/avymiatnin/alt3rsnap",
             env!("CARGO_PKG_VERSION"),
-            if crate::elevate::is_elevated() { "elevated" } else { "normal" }
+            if crate::elevate::is_elevated() {
+                "elevated"
+            } else {
+                "normal"
+            }
         );
         let wtext: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
         windows::Win32::UI::WindowsAndMessaging::MessageBoxW(

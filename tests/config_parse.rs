@@ -8,38 +8,48 @@ fn empty_string_yields_defaults() {
 
 #[test]
 fn modifier_string_is_parsed() {
-    let cfg = load_from_str(r#"
+    let cfg = load_from_str(
+        r#"
         [activation]
         modifier = "ctrl"
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
     assert_eq!(cfg.activation.modifier, "ctrl");
 }
 
 #[test]
 fn exclude_processes_list_round_trips() {
-    let cfg = load_from_str(r#"
+    let cfg = load_from_str(
+        r#"
         [exclude]
         processes = ["mstsc.exe", "vmware-vmx.exe"]
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
     assert_eq!(cfg.exclude.processes, vec!["mstsc.exe", "vmware-vmx.exe"]);
 }
 
 #[test]
 fn unknown_keys_are_silently_tolerated() {
-    let cfg = load_from_str(r#"
+    let cfg = load_from_str(
+        r#"
         [behavior]
         enable_move = true
         mystery_key = 42
-    "#);
+    "#,
+    );
     assert!(cfg.is_ok());
 }
 
 #[test]
 fn bad_type_errors() {
-    let err = load_from_str(r#"
+    let err = load_from_str(
+        r#"
         [behavior]
         enable_move = "not a bool"
-    "#);
+    "#,
+    );
     assert!(err.is_err());
 }
 

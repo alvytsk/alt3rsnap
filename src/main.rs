@@ -35,13 +35,18 @@ fn main() {
     let path = alt3rsnap::config::default_config_path();
     if let Ok(file) = alt3rsnap::config::load_from_path(&path) {
         if let Ok(engine_cfg) = file.to_engine_config() {
-            hook::ENGINE.with(|e| { let _ = e.borrow_mut().set_config(engine_cfg); });
+            hook::ENGINE.with(|e| {
+                let _ = e.borrow_mut().set_config(engine_cfg);
+            });
         }
     }
 
     let tool_hwnd = match tool_window::create() {
         Ok(h) => h,
-        Err(e) => { eprintln!("tool window: {e}"); std::process::exit(1); }
+        Err(e) => {
+            eprintln!("tool window: {e}");
+            std::process::exit(1);
+        }
     };
 
     hook::install().expect("hook install");
@@ -57,6 +62,8 @@ fn main() {
 
 #[cfg(not(windows))]
 fn main() {
-    eprintln!("alt3rsnap is Windows-only; build with `cargo xwin build --target x86_64-pc-windows-msvc`.");
+    eprintln!(
+        "alt3rsnap is Windows-only; build with `cargo xwin build --target x86_64-pc-windows-msvc`."
+    );
     std::process::exit(1);
 }

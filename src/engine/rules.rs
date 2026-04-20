@@ -6,15 +6,21 @@ use regex::Regex;
 
 #[derive(Debug, Clone)]
 pub enum Pattern {
-    Exact(String),           // case-insensitive exact
-    Glob(String),            // '*' and '?' wildcards, case-insensitive
-    Regex(Regex),            // full regex
+    Exact(String), // case-insensitive exact
+    Glob(String),  // '*' and '?' wildcards, case-insensitive
+    Regex(Regex),  // full regex
 }
 
 impl Pattern {
-    pub fn exact<S: Into<String>>(s: S) -> Pattern { Pattern::Exact(s.into().to_lowercase()) }
-    pub fn glob<S: Into<String>>(s: S) -> Pattern { Pattern::Glob(s.into().to_lowercase()) }
-    pub fn regex(r: Regex) -> Pattern { Pattern::Regex(r) }
+    pub fn exact<S: Into<String>>(s: S) -> Pattern {
+        Pattern::Exact(s.into().to_lowercase())
+    }
+    pub fn glob<S: Into<String>>(s: S) -> Pattern {
+        Pattern::Glob(s.into().to_lowercase())
+    }
+    pub fn regex(r: Regex) -> Pattern {
+        Pattern::Regex(r)
+    }
 
     pub fn matches(&self, haystack: &str) -> bool {
         match self {
@@ -32,16 +38,23 @@ fn glob_match(pattern: &str, text: &str) -> bool {
     let (mut pi, mut ti, mut star, mut match_i) = (0usize, 0usize, usize::MAX, 0usize);
     while ti < t.len() {
         if pi < p.len() && (p[pi] == t[ti] || p[pi] == '?') {
-            pi += 1; ti += 1;
+            pi += 1;
+            ti += 1;
         } else if pi < p.len() && p[pi] == '*' {
-            star = pi; match_i = ti; pi += 1;
+            star = pi;
+            match_i = ti;
+            pi += 1;
         } else if star != usize::MAX {
-            pi = star + 1; match_i += 1; ti = match_i;
+            pi = star + 1;
+            match_i += 1;
+            ti = match_i;
         } else {
             return false;
         }
     }
-    while pi < p.len() && p[pi] == '*' { pi += 1; }
+    while pi < p.len() && p[pi] == '*' {
+        pi += 1;
+    }
     pi == p.len()
 }
 
@@ -73,7 +86,7 @@ impl WindowTraitMask {
 
 #[derive(Debug, Clone)]
 pub struct WindowInfo {
-    pub process_basename: String,   // lowercase
+    pub process_basename: String, // lowercase
     pub class_name: String,
     pub title: String,
     pub traits: WindowTraits,

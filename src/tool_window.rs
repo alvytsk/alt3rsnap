@@ -22,7 +22,9 @@ struct HwndWrap(pub HWND);
 unsafe impl Send for HwndWrap {}
 unsafe impl Sync for HwndWrap {}
 
-pub fn hwnd() -> HWND { TOOL_HWND.get().copied().map(|w| w.0).unwrap_or_default() }
+pub fn hwnd() -> HWND {
+    TOOL_HWND.get().copied().map(|w| w.0).unwrap_or_default()
+}
 
 pub fn create() -> windows::core::Result<HWND> {
     unsafe {
@@ -42,8 +44,14 @@ pub fn create() -> windows::core::Result<HWND> {
             TOOL_WND_CLASS,
             w!("Alt3rSnap"),
             WINDOW_STYLE::default(),
-            0, 0, 0, 0,
-            HWND_MESSAGE, None, hinstance, None,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            None,
+            hinstance,
+            None,
         )?;
         let _ = TOOL_HWND.set(HwndWrap(hwnd));
         Ok(hwnd)
@@ -55,7 +63,9 @@ pub fn run_pump() {
         let mut msg = MSG::default();
         loop {
             let got = GetMessageW(&mut msg, HWND::default(), 0, 0);
-            if got.0 <= 0 { break; }
+            if got.0 <= 0 {
+                break;
+            }
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }

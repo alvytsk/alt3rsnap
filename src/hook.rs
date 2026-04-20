@@ -6,20 +6,20 @@
 use std::cell::RefCell;
 
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT,
-    MSLLHOOKSTRUCT, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN,
-    WM_LBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
-};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_CONTROL, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_RCONTROL, VK_RMENU,
     VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_SPACE,
 };
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT,
+    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+};
 
+use alt3rsnap::engine::config::EngineConfig;
 use alt3rsnap::engine::geometry::Point;
 use alt3rsnap::engine::state::{Event, VirtualKey};
 use alt3rsnap::engine::Engine;
-use alt3rsnap::engine::config::EngineConfig;
 
 thread_local! {
     pub static ENGINE: RefCell<Engine> = RefCell::new(Engine::new(EngineConfig::default()));
@@ -39,45 +39,68 @@ pub fn install() -> windows::core::Result<()> {
 
 pub fn uninstall() {
     unsafe {
-        MOUSE_HOOK.with(|h| { if let Some(h) = h.borrow_mut().take() { let _ = UnhookWindowsHookEx(h); } });
-        KEY_HOOK.with(|h| { if let Some(h) = h.borrow_mut().take() { let _ = UnhookWindowsHookEx(h); } });
+        MOUSE_HOOK.with(|h| {
+            if let Some(h) = h.borrow_mut().take() {
+                let _ = UnhookWindowsHookEx(h);
+            }
+        });
+        KEY_HOOK.with(|h| {
+            if let Some(h) = h.borrow_mut().take() {
+                let _ = UnhookWindowsHookEx(h);
+            }
+        });
     }
 }
 
 unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code < 0 { return CallNextHookEx(None, code, wparam, lparam); }
+    if code < 0 {
+        return CallNextHookEx(None, code, wparam, lparam);
+    }
     let info = &*(lparam.0 as *const MSLLHOOKSTRUCT);
-    let cursor = Point { x: info.pt.x, y: info.pt.y };
+    let cursor = Point {
+        x: info.pt.x,
+        y: info.pt.y,
+    };
 
     let event = match wparam.0 as u32 {
-        WM_MOUSEMOVE   => Some(Event::MouseMove { cursor }),
+        WM_MOUSEMOVE => Some(Event::MouseMove { cursor }),
         WM_LBUTTONDOWN => {
             let target = crate::adapter::resolve_target(cursor);
             Some(Event::LeftDown { cursor, target })
         }
-        WM_LBUTTONUP   => Some(Event::LeftUp),
+        WM_LBUTTONUP => Some(Event::LeftUp),
         WM_RBUTTONDOWN => {
             let target = crate::adapter::resolve_target(cursor);
             Some(Event::RightDown { cursor, target })
         }
-        WM_RBUTTONUP   => Some(Event::RightUp),
+        WM_RBUTTONUP => Some(Event::RightUp),
         _ => None,
     };
 
     let swallow = if let Some(ev) = event {
         let actions = ENGINE.with(|e| e.borrow_mut().handle(ev));
         crate::adapter::apply_actions(&actions)
-    } else { false };
+    } else {
+        false
+    };
 
-    if swallow { LRESULT(1) } else { CallNextHookEx(None, code, wparam, lparam) }
+    if swallow {
+        LRESULT(1)
+    } else {
+        CallNextHookEx(None, code, wparam, lparam)
+    }
 }
 
 unsafe extern "system" fn key_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code < 0 { return CallNextHookEx(None, code, wparam, lparam); }
+    if code < 0 {
+        return CallNextHookEx(None, code, wparam, lparam);
+    }
     let info = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
     let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
-    let up   = matches!(wparam.0 as u32, WM_KEYUP | WM_SYSKEYUP);
-    if !(down || up) { return CallNextHookEx(None, code, wparam, lparam); }
+    let up = matches!(wparam.0 as u32, WM_KEYUP | WM_SYSKEYUP);
+    if !(down || up) {
+        return CallNextHookEx(None, code, wparam, lparam);
+    }
 
     let vk = map_vk(info.vkCode as u16);
 

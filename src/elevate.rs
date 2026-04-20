@@ -5,9 +5,7 @@ use std::path::PathBuf;
 
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
-use windows::Win32::Security::{
-    GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
-};
+use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
@@ -17,7 +15,9 @@ const SENTINEL_ARG: &str = "--relaunched";
 pub fn is_elevated() -> bool {
     unsafe {
         let mut token: HANDLE = HANDLE::default();
-        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() { return false; }
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+            return false;
+        }
         let mut elevation = TOKEN_ELEVATION::default();
         let mut size = std::mem::size_of::<TOKEN_ELEVATION>() as u32;
         let ok = GetTokenInformation(
@@ -26,19 +26,31 @@ pub fn is_elevated() -> bool {
             Some(&mut elevation as *mut _ as *mut _),
             size,
             &mut size,
-        ).is_ok();
+        )
+        .is_ok();
         let _ = CloseHandle(token);
         ok && elevation.TokenIsElevated != 0
     }
 }
 
-fn exe_path() -> PathBuf { std::env::current_exe().unwrap_or_default() }
+fn exe_path() -> PathBuf {
+    std::env::current_exe().unwrap_or_default()
+}
 
 pub fn restart_elevated() {
-    if is_elevated() { return; }
+    if is_elevated() {
+        return;
+    }
     let exe = exe_path();
-    let exe_w: Vec<u16> = exe.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
-    let args_w: Vec<u16> = SENTINEL_ARG.encode_utf16().chain(std::iter::once(0)).collect();
+    let exe_w: Vec<u16> = exe
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let args_w: Vec<u16> = SENTINEL_ARG
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
     unsafe {
         let mut info = SHELLEXECUTEINFOW {
             cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
@@ -56,7 +68,9 @@ pub fn restart_elevated() {
 }
 
 pub fn restart_normal() {
-    if !is_elevated() { return; }
+    if !is_elevated() {
+        return;
+    }
     let exe = exe_path();
     let cmd = format!("\"{}\"", exe.to_string_lossy());
     let cmd_w: Vec<u16> = cmd.encode_utf16().chain(std::iter::once(0)).collect();

@@ -10,7 +10,10 @@ impl Point {
     pub const ZERO: Point = Point { x: 0, y: 0 };
 
     pub fn delta(self, other: Point) -> Point {
-        Point { x: self.x - other.x, y: self.y - other.y }
+        Point {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
     }
 }
 
@@ -23,8 +26,12 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub fn width(self) -> i32 { self.right - self.left }
-    pub fn height(self) -> i32 { self.bottom - self.top }
+    pub fn width(self) -> i32 {
+        self.right - self.left
+    }
+    pub fn height(self) -> i32 {
+        self.bottom - self.top
+    }
 
     pub fn translate_by(self, d: Point) -> Rect {
         Rect {
@@ -49,9 +56,15 @@ impl Rect {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sector {
-    TopLeft, Top, TopRight,
-    Left, Center, Right,
-    BottomLeft, Bottom, BottomRight,
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    Center,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
 }
 
 /// Classify `cursor` into one of nine sectors of `rect`. `center_fraction` is the
@@ -67,12 +80,20 @@ pub fn pick_sector(rect: Rect, cursor: Point, center_fraction: f32) -> Sector {
     let top_edge = rect.top + side_height;
     let bottom_edge = rect.bottom - side_height;
 
-    let col = if cursor.x < left_edge { 0 }
-              else if cursor.x >= right_edge { 2 }
-              else { 1 };
-    let row = if cursor.y < top_edge { 0 }
-              else if cursor.y >= bottom_edge { 2 }
-              else { 1 };
+    let col = if cursor.x < left_edge {
+        0
+    } else if cursor.x >= right_edge {
+        2
+    } else {
+        1
+    };
+    let row = if cursor.y < top_edge {
+        0
+    } else if cursor.y >= bottom_edge {
+        2
+    } else {
+        1
+    };
 
     match (row, col) {
         (0, 0) => Sector::TopLeft,
@@ -90,9 +111,14 @@ pub fn pick_sector(rect: Rect, cursor: Point, center_fraction: f32) -> Sector {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResizeAnchor {
-    TopLeft, Top, TopRight,
-    Left,          Right,
-    BottomLeft, Bottom, BottomRight,
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
     CenterSymmetric,
 }
 
@@ -101,13 +127,13 @@ pub enum ResizeAnchor {
 pub fn apply_resize(rect: Rect, anchor: ResizeAnchor, delta: Point) -> Rect {
     use ResizeAnchor::*;
     let (dl, dt, dr, db) = match anchor {
-        TopLeft     => (delta.x, delta.y, 0, 0),
-        Top         => (0, delta.y, 0, 0),
-        TopRight    => (0, delta.y, delta.x, 0),
-        Left        => (delta.x, 0, 0, 0),
-        Right       => (0, 0, delta.x, 0),
-        BottomLeft  => (delta.x, 0, 0, delta.y),
-        Bottom      => (0, 0, 0, delta.y),
+        TopLeft => (delta.x, delta.y, 0, 0),
+        Top => (0, delta.y, 0, 0),
+        TopRight => (0, delta.y, delta.x, 0),
+        Left => (delta.x, 0, 0, 0),
+        Right => (0, 0, delta.x, 0),
+        BottomLeft => (delta.x, 0, 0, delta.y),
+        Bottom => (0, 0, 0, delta.y),
         BottomRight => (0, 0, delta.x, delta.y),
         CenterSymmetric => (-delta.x, -delta.y, delta.x, delta.y),
     };

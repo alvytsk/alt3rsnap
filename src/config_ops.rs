@@ -2,7 +2,9 @@
 
 use std::path::PathBuf;
 
-pub fn config_path() -> PathBuf { alt3rsnap::config::default_config_path() }
+pub fn config_path() -> PathBuf {
+    alt3rsnap::config::default_config_path()
+}
 
 pub fn open_in_editor() {
     let path = config_path();
@@ -35,7 +37,7 @@ pub fn reload() {
                 });
             }
             Err(e) => eprintln!("engine config conversion failed: {e}"),
-        }
+        },
         Err(e) => eprintln!("config load failed: {e}"),
     }
 }
