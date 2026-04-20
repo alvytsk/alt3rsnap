@@ -21,7 +21,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SWP_NOACTIVATE, SWP_NOSENDCHANGING, SWP_NOZORDER, SW_RESTORE, WINDOW_EX_STYLE, WINDOW_STYLE,
     WS_CAPTION, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_OVERLAPPEDWINDOW,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::keybd_event;
+use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, ReleaseCapture, SetCapture};
 
 pub fn to_win_point(p: GPoint) -> POINT { POINT { x: p.x, y: p.y } }
 pub fn from_win_rect(r: RECT) -> GRect {
@@ -155,3 +155,6 @@ pub unsafe fn window_under_cursor_hwnd(cursor: GPoint) -> Option<HWND> {
     if hwnd.0.is_null() { return None; }
     Some(hwnd)
 }
+
+pub unsafe fn capture_mouse(tool_hwnd: HWND) { let _ = SetCapture(tool_hwnd); }
+pub unsafe fn release_mouse() { let _ = ReleaseCapture(); }

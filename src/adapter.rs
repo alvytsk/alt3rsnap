@@ -32,17 +32,15 @@ pub fn apply_actions(actions: &[Action]) -> bool {
     let mut swallow = false;
     for a in actions {
         match a {
-            Action::BeginDrag { hwnd, .. } => unsafe {
-                let h: HWND = win_api::id_to_hwnd(*hwnd);
-                // SetCapture handled via win_api::capture_mouse in Task 25.
-                let _ = h;
+            Action::BeginDrag { .. } => unsafe {
+                win_api::capture_mouse(crate::tool_window::hwnd());
             },
             Action::UpdateDrag { hwnd, new_rect } => unsafe {
                 win_api::set_window_rect(win_api::id_to_hwnd(*hwnd), *new_rect);
             },
-            Action::EndDrag { .. } => {
-                // Release any captured mouse (wired in Task 25).
-            }
+            Action::EndDrag { .. } => unsafe {
+                win_api::release_mouse();
+            },
             Action::RestoreIfMaximized { hwnd, .. } => unsafe {
                 win_api::restore(win_api::id_to_hwnd(*hwnd));
             },
