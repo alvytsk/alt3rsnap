@@ -42,3 +42,36 @@ fn bad_type_errors() {
     "#);
     assert!(err.is_err());
 }
+
+use alt3rsnap::engine::modifiers::Modifiers;
+
+#[test]
+fn file_config_with_alt_modifier_produces_arm_matcher_requiring_alt() {
+    let file = FileConfig::default();
+    let ec = file.to_engine_config().unwrap();
+    assert!(ec.policy.arm.matches(Modifiers::ALT));
+}
+
+#[test]
+fn file_config_with_ctrl_modifier_produces_arm_matcher_requiring_ctrl() {
+    let mut file = FileConfig::default();
+    file.activation.modifier = "ctrl".into();
+    let ec = file.to_engine_config().unwrap();
+    assert!(ec.policy.arm.matches(Modifiers::CTRL));
+    assert!(!ec.policy.arm.matches(Modifiers::ALT));
+}
+
+#[test]
+fn unknown_modifier_errors() {
+    let mut file = FileConfig::default();
+    file.activation.modifier = "not-a-key".into();
+    assert!(file.to_engine_config().is_err());
+}
+
+#[test]
+fn exclude_processes_become_rules() {
+    let mut file = FileConfig::default();
+    file.exclude.processes = vec!["mstsc.exe".into()];
+    let ec = file.to_engine_config().unwrap();
+    assert_eq!(ec.rules.len(), 1);
+}

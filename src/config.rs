@@ -70,6 +70,8 @@ pub enum ConfigError {
     Toml(#[from] toml::de::Error),
     #[error("toml serialize error: {0}")]
     TomlSer(#[from] toml::ser::Error),
+    #[error("invalid config: {0}")]
+    Invalid(String),
 }
 
 pub fn load_from_str(s: &str) -> Result<FileConfig, ConfigError> {
@@ -112,3 +114,66 @@ pub fn default_config_path() -> PathBuf {
     }
     PathBuf::from("config.toml")
 }
+
+use crate::engine::config::EngineConfig;
+use crate::engine::modifiers::{ModMatcher, Modifiers};
+use crate::engine::policy::ActivationPolicy;
+use crate::engine::rules::{Pattern, RuleAction, WindowRule, WindowTraitMask};
+
+impl FileConfig {
+    pub fn to_engine_config(&self) -> Result<EngineConfig, ConfigError> {
+        let arm_mods = parse_modifier_string(&self.activation.modifier)
+            .ok_or_else(|| toml_err(format!("unknown modifier: {}", self.activation.modifier)))?;
+
+        let mut policy = ActivationPolicy::default();
+        policy.arm = ModMatcher {
+            required: arm_mods,
+            // Keep the default's forbidden (WIN) only if Alt is the required; otherwise no forbidden.
+            forbidden: if arm_mods == Modifiers::ALT { Modifiers::WIN } else { Modifiers::NONE },
+            exact: false,
+        };
+
+        let rules = self.exclude.processes.iter().map(|p| WindowRule {
+            match_process: Some(Pattern::exact(p.clone())),
+            match_class: None,
+            match_title: None,
+            match_traits: WindowTraitMask::default(),
+            action: RuleAction::Exclude,
+        }).collect();
+
+        if self.resize.center_mode != "symmetric" {
+            return Err(toml_err(format!(
+                "center_mode='{}' is not implemented in v0.1 (only 'symmetric')",
+                self.resize.center_mode
+            )));
+        }
+
+        Ok(EngineConfig {
+            enabled: true,
+            enable_move: self.behavior.enable_move,
+            enable_resize: self.behavior.enable_resize,
+            raise_on_drag: self.behavior.raise_on_drag,
+            restore_maximized_on_move: self.behavior.restore_maximized_on_move,
+            policy,
+            rules,
+            center_fraction: self.resize.center_fraction.clamp(0.0, 1.0),
+        })
+    }
+}
+
+fn parse_modifier_string(s: &str) -> Option<Modifiers> {
+    let mut result = Modifiers::NONE;
+    for part in s.split('+').map(|p| p.trim().to_lowercase()) {
+        let m = match part.as_str() {
+            "alt"   => Modifiers::ALT,
+            "ctrl"  => Modifiers::CTRL,
+            "shift" => Modifiers::SHIFT,
+            "win"   => Modifiers::WIN,
+            _ => return None,
+        };
+        result = result.with(m);
+    }
+    if result.is_empty() { None } else { Some(result) }
+}
+
+fn toml_err(msg: String) -> ConfigError { ConfigError::Invalid(msg) }
