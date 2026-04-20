@@ -1,5 +1,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod logging;
+
 #[cfg(windows)]
 mod adapter;
 #[cfg(windows)]
@@ -23,6 +25,10 @@ mod win_api;
 
 #[cfg(windows)]
 fn main() {
+    let _log_guard = logging::init();
+    logging::install_panic_hook();
+    tracing::info!("alt3rsnap starting v{}", env!("CARGO_PKG_VERSION"));
+
     dpi::init();
 
     // Load config and configure the engine first.
