@@ -22,7 +22,11 @@ pub struct Activation {
     pub modifier: String,
 }
 impl Default for Activation {
-    fn default() -> Self { Self { modifier: "alt".into() } }
+    fn default() -> Self {
+        Self {
+            modifier: "alt".into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -47,12 +51,15 @@ impl Default for Behavior {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Resize {
-    pub center_mode: String,    // "symmetric" only in v0.1
+    pub center_mode: String, // "symmetric" only in v0.1
     pub center_fraction: f32,
 }
 impl Default for Resize {
     fn default() -> Self {
-        Self { center_mode: "symmetric".into(), center_fraction: 1.0 / 3.0 }
+        Self {
+            center_mode: "symmetric".into(),
+            center_fraction: 1.0 / 3.0,
+        }
     }
 }
 
@@ -125,21 +132,32 @@ impl FileConfig {
         let arm_mods = parse_modifier_string(&self.activation.modifier)
             .ok_or_else(|| toml_err(format!("unknown modifier: {}", self.activation.modifier)))?;
 
-        let mut policy = ActivationPolicy::default();
-        policy.arm = ModMatcher {
-            required: arm_mods,
-            // Keep the default's forbidden (WIN) only if Alt is the required; otherwise no forbidden.
-            forbidden: if arm_mods == Modifiers::ALT { Modifiers::WIN } else { Modifiers::NONE },
-            exact: false,
+        let policy = ActivationPolicy {
+            arm: ModMatcher {
+                required: arm_mods,
+                // Keep the default's forbidden (WIN) only if Alt is the required; otherwise no forbidden.
+                forbidden: if arm_mods == Modifiers::ALT {
+                    Modifiers::WIN
+                } else {
+                    Modifiers::NONE
+                },
+                exact: false,
+            },
+            ..Default::default()
         };
 
-        let rules = self.exclude.processes.iter().map(|p| WindowRule {
-            match_process: Some(Pattern::exact(p.clone())),
-            match_class: None,
-            match_title: None,
-            match_traits: WindowTraitMask::default(),
-            action: RuleAction::Exclude,
-        }).collect();
+        let rules = self
+            .exclude
+            .processes
+            .iter()
+            .map(|p| WindowRule {
+                match_process: Some(Pattern::exact(p.clone())),
+                match_class: None,
+                match_title: None,
+                match_traits: WindowTraitMask::default(),
+                action: RuleAction::Exclude,
+            })
+            .collect();
 
         if self.resize.center_mode != "symmetric" {
             return Err(toml_err(format!(
@@ -165,15 +183,21 @@ fn parse_modifier_string(s: &str) -> Option<Modifiers> {
     let mut result = Modifiers::NONE;
     for part in s.split('+').map(|p| p.trim().to_lowercase()) {
         let m = match part.as_str() {
-            "alt"   => Modifiers::ALT,
-            "ctrl"  => Modifiers::CTRL,
+            "alt" => Modifiers::ALT,
+            "ctrl" => Modifiers::CTRL,
             "shift" => Modifiers::SHIFT,
-            "win"   => Modifiers::WIN,
+            "win" => Modifiers::WIN,
             _ => return None,
         };
         result = result.with(m);
     }
-    if result.is_empty() { None } else { Some(result) }
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
+    }
 }
 
-fn toml_err(msg: String) -> ConfigError { ConfigError::Invalid(msg) }
+fn toml_err(msg: String) -> ConfigError {
+    ConfigError::Invalid(msg)
+}

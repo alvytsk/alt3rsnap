@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+#[allow(dead_code)]
 pub fn init() -> Option<tracing_appender::non_blocking::WorkerGuard> {
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
@@ -19,6 +20,7 @@ pub fn init() -> Option<tracing_appender::non_blocking::WorkerGuard> {
     Some(guard)
 }
 
+#[allow(dead_code)]
 pub fn install_panic_hook() {
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -31,6 +33,7 @@ pub fn install_panic_hook() {
     }));
 }
 
+#[allow(dead_code)]
 pub fn log_dir() -> PathBuf {
     if let Some(dirs) = directories::ProjectDirs::from("com", "Alt3rSnap", "Alt3rSnap") {
         return dirs.data_dir().join("logs");
