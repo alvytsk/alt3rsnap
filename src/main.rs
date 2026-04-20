@@ -5,6 +5,8 @@ mod adapter;
 #[cfg(windows)]
 mod dpi;
 #[cfg(windows)]
+mod fullscreen;
+#[cfg(windows)]
 mod hook;
 #[cfg(windows)]
 mod tool_window;
@@ -18,7 +20,9 @@ fn main() {
         eprintln!("hook install failed: {e}");
         std::process::exit(1);
     }
+    fullscreen::install();
     let result = tool_window::init_and_run();
+    fullscreen::uninstall();
     hook::uninstall();
     if let Err(e) = result {
         eprintln!("tool window error: {e}");
