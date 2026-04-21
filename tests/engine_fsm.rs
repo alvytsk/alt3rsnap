@@ -319,3 +319,19 @@ fn toggle_maximize_action_exists_and_carries_window_id() {
         panic!("expected ToggleMaximize");
     }
 }
+
+#[test]
+fn middle_down_event_exists_and_carries_cursor_and_target() {
+    let ev = Event::MiddleDown {
+        cursor: Point { x: 10, y: 20 },
+        target: Some(default_target()),
+    };
+    match ev {
+        Event::MiddleDown { cursor, target } => {
+            assert_eq!(cursor.x, 10);
+            assert_eq!(cursor.y, 20);
+            assert!(target.is_some());
+        }
+        _ => panic!("expected MiddleDown"),
+    }
+}

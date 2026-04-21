@@ -63,6 +63,10 @@ pub enum Event {
         target: Option<DragTarget>,
     },
     RightUp,
+    MiddleDown {
+        cursor: Point,
+        target: Option<DragTarget>,
+    },
     MouseMove {
         cursor: Point,
     },

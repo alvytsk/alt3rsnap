@@ -221,6 +221,9 @@ impl Engine {
                     self.reconcile_arm_state(&mut actions);
                 }
             }
+            Event::MiddleDown { .. } => {
+                // M1: MiddleDown is not yet handled by the engine.
+            }
             Event::ToggleEnable => match std::mem::replace(&mut self.state, State::Idle) {
                 State::Disabled => {
                     self.state = State::Idle;
