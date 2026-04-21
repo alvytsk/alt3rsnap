@@ -9,11 +9,13 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostQuitMessage,
-    RegisterClassExW, TranslateMessage, HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE,
-    WM_COMMAND, WM_DESTROY, WNDCLASSEXW,
+    RegisterClassExW, SetTimer, TranslateMessage, HWND_MESSAGE, MSG, WINDOW_EX_STYLE,
+    WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_TIMER, WNDCLASSEXW,
 };
 
 pub const TOOL_WND_CLASS: PCWSTR = w!("Alt3rSnapToolWnd");
+
+const TIMER_ID_SWALLOW_LATCH: usize = 0x4153_0001; // "AS0001" — avoids collision with tray ids.
 
 static TOOL_HWND: OnceLock<HwndWrap> = OnceLock::new();
 
@@ -54,6 +56,7 @@ pub fn create() -> windows::core::Result<HWND> {
             None,
         )?;
         let _ = TOOL_HWND.set(HwndWrap(hwnd));
+        let _ = SetTimer(hwnd, TIMER_ID_SWALLOW_LATCH, 250, None);
         Ok(hwnd)
     }
 }
@@ -86,6 +89,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let id = (wparam.0 as u32) & 0xFFFF;
             crate::tray::on_command(id);
             LRESULT(0)
+        }
+        WM_TIMER => {
+            if wparam.0 == TIMER_ID_SWALLOW_LATCH {
+                let now = windows::Win32::System::SystemInformation::GetTickCount64();
+                crate::adapter::swallow_latch().on_timer(now);
+                LRESULT(0)
+            } else {
+                DefWindowProcW(hwnd, msg, wparam, lparam)
+            }
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
