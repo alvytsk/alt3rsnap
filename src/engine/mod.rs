@@ -5,6 +5,7 @@ pub mod geometry;
 pub mod modifiers;
 pub mod policy;
 pub mod rules;
+pub mod snap;
 pub mod state;
 
 use crate::engine::config::{CenterMode, EngineConfig, MiddleClickAction};

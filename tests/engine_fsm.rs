@@ -611,3 +611,35 @@ fn snap_actions_construct_and_carry_payloads() {
     assert!(matches!(h, Action::HideSnapPreview));
     assert!(matches!(a, Action::ApplySnapRect { hwnd: WindowId(7), rect } if rect == r));
 }
+
+#[test]
+fn snap_scaffold_types_exist_and_round_trip() {
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot, SnapZone, SnapZoneId};
+    let mi = MonitorInfo {
+        bounds: Rect {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+        },
+        work_area: Rect {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1040,
+        },
+        scale: 100,
+    };
+    let snap = MonitorSnapshot {
+        monitors: vec![mi.clone()],
+    };
+    assert_eq!(snap.monitors.len(), 1);
+    assert_eq!(snap.monitors[0].work_area.bottom, 1040);
+
+    let z = SnapZone {
+        id: SnapZoneId::LeftHalf,
+        target_rect: mi.work_area,
+        monitor_index: 0,
+    };
+    assert_eq!(z.id, SnapZoneId::LeftHalf);
+}
