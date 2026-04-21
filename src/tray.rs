@@ -5,7 +5,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, WPARAM};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_WARNING, NIM_ADD, NIM_DELETE,
     NIM_MODIFY, NOTIFYICONDATAW,
@@ -35,13 +36,18 @@ static ENABLED: AtomicBool = AtomicBool::new(true);
 
 pub fn install(tool_hwnd: HWND) {
     unsafe {
+        let hinstance: HINSTANCE = GetModuleHandleW(None).unwrap_or_default().into();
+        let icon_id = PCWSTR(1_usize as *const u16);
+        let hicon = LoadIconW(hinstance, icon_id)
+            .or_else(|_| LoadIconW(None, IDI_APPLICATION))
+            .unwrap_or_default();
         let mut nid = NOTIFYICONDATAW {
             cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: tool_hwnd,
             uID: 1,
             uFlags: NIF_ICON | NIF_MESSAGE | NIF_TIP,
             uCallbackMessage: WM_TRAY_CALLBACK,
-            hIcon: LoadIconW(None, IDI_APPLICATION).unwrap_or_default(),
+            hIcon: hicon,
             ..Default::default()
         };
         let tip = "Alt3rSnap";
@@ -122,15 +128,25 @@ fn show_menu(hwnd: HWND) {
             w!("Enabled"),
         );
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        let autostart_normal = crate::autostart::is_normal_enabled();
+        let autostart_elevated = crate::autostart::is_elevated_enabled();
         let _ = AppendMenuW(
             menu,
-            MF_STRING,
+            if autostart_normal {
+                MF_CHECKED
+            } else {
+                MF_UNCHECKED
+            } | MF_STRING,
             ID_AUTOSTART_NORMAL as usize,
             w!("Autostart on logon"),
         );
         let _ = AppendMenuW(
             menu,
-            MF_STRING,
+            if autostart_elevated {
+                MF_CHECKED
+            } else {
+                MF_UNCHECKED
+            } | MF_STRING,
             ID_AUTOSTART_ELEVATED as usize,
             w!("Autostart as elevated"),
         );
