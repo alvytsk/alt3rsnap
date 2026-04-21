@@ -310,9 +310,7 @@ fn set_config_disabling_stops_engine() {
 
 #[test]
 fn toggle_maximize_action_exists_and_carries_window_id() {
-    let a = Action::ToggleMaximize {
-        hwnd: WindowId(42),
-    };
+    let a = Action::ToggleMaximize { hwnd: WindowId(42) };
     if let Action::ToggleMaximize { hwnd } = a {
         assert_eq!(hwnd, WindowId(42));
     } else {
@@ -374,9 +372,7 @@ fn armed_plus_middle_down_on_normal_window_emits_toggle_and_swallow() {
     assert_eq!(
         actions,
         vec![
-            Action::ToggleMaximize {
-                hwnd: WindowId(1),
-            },
+            Action::ToggleMaximize { hwnd: WindowId(1) },
             Action::SwallowEvent,
         ]
     );

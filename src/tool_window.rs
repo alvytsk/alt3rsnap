@@ -9,8 +9,8 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostQuitMessage,
-    RegisterClassExW, SetTimer, TranslateMessage, HWND_MESSAGE, MSG, WINDOW_EX_STYLE,
-    WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_TIMER, WNDCLASSEXW,
+    RegisterClassExW, SetTimer, TranslateMessage, HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE,
+    WM_COMMAND, WM_DESTROY, WM_TIMER, WNDCLASSEXW,
 };
 
 pub const TOOL_WND_CLASS: PCWSTR = w!("Alt3rSnapToolWnd");

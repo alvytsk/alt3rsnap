@@ -132,7 +132,10 @@ fn bridge_middle_click_action_toggle_maximize() {
     let mut file = FileConfig::default();
     file.behavior.middle_click_action = "toggle_maximize".into();
     let engine = file.to_engine_config().expect("bridge ok");
-    assert_eq!(engine.middle_click_action, MiddleClickAction::ToggleMaximize);
+    assert_eq!(
+        engine.middle_click_action,
+        MiddleClickAction::ToggleMaximize
+    );
 }
 
 #[test]
@@ -159,5 +162,8 @@ fn bridge_middle_click_action_case_insensitive() {
     let mut file = FileConfig::default();
     file.behavior.middle_click_action = "Toggle_Maximize".into();
     let engine = file.to_engine_config().expect("bridge ok");
-    assert_eq!(engine.middle_click_action, MiddleClickAction::ToggleMaximize);
+    assert_eq!(
+        engine.middle_click_action,
+        MiddleClickAction::ToggleMaximize
+    );
 }
