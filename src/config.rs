@@ -175,6 +175,7 @@ impl FileConfig {
             policy,
             rules,
             center_fraction: self.resize.center_fraction.clamp(0.0, 1.0),
+            middle_click_action: crate::engine::config::MiddleClickAction::None,
         })
     }
 }
