@@ -434,3 +434,149 @@ fn armed_plus_middle_down_with_no_target_is_noop() {
     });
     assert!(actions.is_empty());
 }
+
+use alt3rsnap::engine::config::CenterMode;
+use alt3rsnap::engine::state::DragOrigin;
+
+#[test]
+fn engine_config_default_center_mode_is_symmetric() {
+    assert_eq!(EngineConfig::default().center_mode, CenterMode::Symmetric);
+}
+
+#[test]
+fn center_mode_variants_exist() {
+    let _ = CenterMode::Symmetric;
+    let _ = CenterMode::BottomRight;
+    let _ = CenterMode::Move;
+}
+
+#[test]
+fn drag_origin_variants_exist() {
+    let _ = DragOrigin::PrimaryButton;
+    let _ = DragOrigin::CenterMoveMode;
+}
+
+#[test]
+fn state_moving_has_drag_origin_primary_button_on_left_down() {
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    e.handle(Event::LeftDown {
+        cursor: Point { x: 150, y: 150 },
+        target: Some(default_target()),
+    });
+    assert!(matches!(
+        e.state(),
+        State::Moving {
+            drag_origin: DragOrigin::PrimaryButton,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn right_down_center_sector_with_bottom_right_mode_uses_top_left_anchor() {
+    let cfg = EngineConfig {
+        center_mode: CenterMode::BottomRight,
+        ..Default::default()
+    };
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    let actions = e.handle(Event::RightDown {
+        cursor: Point { x: 200, y: 200 }, // center of [100..300]
+        target: Some(default_target()),
+    });
+    assert!(actions.iter().any(|a| matches!(
+        a,
+        Action::BeginDrag {
+            mode: DragMode::Resize {
+                anchor: alt3rsnap::engine::geometry::ResizeAnchor::TopLeft,
+            },
+            ..
+        }
+    )));
+    assert!(matches!(e.state(), State::Resizing { .. }));
+}
+
+#[test]
+fn right_down_center_sector_with_move_mode_enters_moving() {
+    let cfg = EngineConfig {
+        center_mode: CenterMode::Move,
+        ..Default::default()
+    };
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    let actions = e.handle(Event::RightDown {
+        cursor: Point { x: 200, y: 200 }, // center of [100..300]
+        target: Some(default_target()),
+    });
+    assert!(actions.iter().any(|a| matches!(
+        a,
+        Action::BeginDrag {
+            mode: DragMode::Move,
+            ..
+        }
+    )));
+    assert!(matches!(
+        e.state(),
+        State::Moving {
+            drag_origin: DragOrigin::CenterMoveMode,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn right_up_ends_center_move_mode_drag() {
+    let cfg = EngineConfig {
+        center_mode: CenterMode::Move,
+        ..Default::default()
+    };
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    e.handle(Event::RightDown {
+        cursor: Point { x: 200, y: 200 },
+        target: Some(default_target()),
+    });
+    assert!(matches!(e.state(), State::Moving { .. }));
+    let actions = e.handle(Event::RightUp);
+    assert!(actions.contains(&Action::EndDrag { hwnd: WindowId(1) }));
+    assert!(actions.contains(&Action::CancelMenuActivation));
+    assert!(matches!(e.state(), State::Armed));
+}
+
+#[test]
+fn right_down_non_center_with_move_mode_still_resizes() {
+    let cfg = EngineConfig {
+        center_mode: CenterMode::Move,
+        ..Default::default()
+    };
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    let actions = e.handle(Event::RightDown {
+        cursor: Point { x: 110, y: 110 }, // top-left sector of [100..300]
+        target: Some(default_target()),
+    });
+    assert!(actions.iter().any(|a| matches!(
+        a,
+        Action::BeginDrag {
+            mode: DragMode::Resize { .. },
+            ..
+        }
+    )));
+    assert!(matches!(e.state(), State::Resizing { .. }));
+}

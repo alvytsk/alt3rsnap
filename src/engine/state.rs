@@ -17,6 +17,12 @@ pub enum VirtualKey {
     Other(u16),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DragOrigin {
+    PrimaryButton,
+    CenterMoveMode,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum State {
     Disabled,
@@ -26,6 +32,7 @@ pub enum State {
         hwnd: WindowId,
         initial_rect: Rect,
         grab: Point,
+        drag_origin: DragOrigin,
         pending_passthrough: bool,
     },
     Resizing {

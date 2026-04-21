@@ -3,6 +3,40 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PatternFile {
+    Exact(String),
+    Glob(String),
+    Regex(String),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WindowTraitMaskFile {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_topmost: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_cloaked: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_tool: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_owned: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuleFile {
+    #[serde(default)]
+    pub match_process: Option<PatternFile>,
+    #[serde(default)]
+    pub match_class: Option<PatternFile>,
+    #[serde(default)]
+    pub match_title: Option<PatternFile>,
+    #[serde(default)]
+    pub match_traits: WindowTraitMaskFile,
+    pub action: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FileConfig {
@@ -14,6 +48,8 @@ pub struct FileConfig {
     pub resize: Resize,
     #[serde(default)]
     pub exclude: Exclude,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<RuleFile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,6 +164,7 @@ use crate::engine::config::EngineConfig;
 use crate::engine::modifiers::{ModMatcher, Modifiers};
 use crate::engine::policy::ActivationPolicy;
 use crate::engine::rules::{Pattern, RuleAction, WindowRule, WindowTraitMask};
+use regex::RegexBuilder;
 
 impl FileConfig {
     pub fn to_engine_config(&self) -> Result<EngineConfig, ConfigError> {
@@ -148,7 +185,7 @@ impl FileConfig {
             ..Default::default()
         };
 
-        let rules = self
+        let mut rules: Vec<WindowRule> = self
             .exclude
             .processes
             .iter()
@@ -161,13 +198,13 @@ impl FileConfig {
             })
             .collect();
 
-        if self.resize.center_mode != "symmetric" {
-            return Err(toml_err(format!(
-                "center_mode='{}' is not implemented in v0.1 (only 'symmetric')",
-                self.resize.center_mode
-            )));
+        for r in &self.rules {
+            if let Some(rule) = bridge_rule(r) {
+                rules.push(rule);
+            }
         }
 
+        let center_mode = parse_center_mode(&self.resize.center_mode);
         let middle_click_action = parse_middle_click_action(&self.behavior.middle_click_action);
 
         Ok(EngineConfig {
@@ -179,6 +216,7 @@ impl FileConfig {
             policy,
             rules,
             center_fraction: self.resize.center_fraction.clamp(0.0, 1.0),
+            center_mode,
             middle_click_action,
         })
     }
@@ -203,6 +241,22 @@ fn parse_modifier_string(s: &str) -> Option<Modifiers> {
     }
 }
 
+fn parse_center_mode(s: &str) -> crate::engine::config::CenterMode {
+    use crate::engine::config::CenterMode as C;
+    match s.trim().to_ascii_lowercase().as_str() {
+        "" | "symmetric" => C::Symmetric,
+        "bottom_right" => C::BottomRight,
+        "move" => C::Move,
+        other => {
+            tracing::warn!(
+                value = %other,
+                "unknown resize.center_mode; defaulting to \"symmetric\""
+            );
+            C::Symmetric
+        }
+    }
+}
+
 fn parse_middle_click_action(s: &str) -> crate::engine::config::MiddleClickAction {
     use crate::engine::config::MiddleClickAction as M;
     match s.trim().to_ascii_lowercase().as_str() {
@@ -216,6 +270,83 @@ fn parse_middle_click_action(s: &str) -> crate::engine::config::MiddleClickActio
             M::None
         }
     }
+}
+
+fn bridge_pattern_process(p: &PatternFile) -> Option<Pattern> {
+    match p {
+        PatternFile::Exact(s) => Some(Pattern::exact(s.clone())),
+        PatternFile::Glob(s) => Some(Pattern::glob(s.clone())),
+        PatternFile::Regex(s) => match RegexBuilder::new(s).case_insensitive(true).build() {
+            Ok(r) => Some(Pattern::regex(r)),
+            Err(_) => {
+                tracing::warn!(pattern = %s, "process regex compile error, dropping rule");
+                None
+            }
+        },
+    }
+}
+
+fn bridge_pattern_text(p: &PatternFile) -> Option<Pattern> {
+    match p {
+        PatternFile::Exact(s) => Some(Pattern::exact(s.clone())),
+        PatternFile::Glob(s) => Some(Pattern::glob(s.clone())),
+        PatternFile::Regex(s) => match regex::Regex::new(s) {
+            Ok(r) => Some(Pattern::regex(r)),
+            Err(_) => {
+                tracing::warn!(pattern = %s, "regex compile error, dropping rule");
+                None
+            }
+        },
+    }
+}
+
+fn bridge_rule(r: &RuleFile) -> Option<WindowRule> {
+    let has_matcher = r.match_process.is_some()
+        || r.match_class.is_some()
+        || r.match_title.is_some()
+        || r.match_traits.require_topmost.is_some()
+        || r.match_traits.require_cloaked.is_some()
+        || r.match_traits.require_tool.is_some()
+        || r.match_traits.require_owned.is_some();
+    if !has_matcher {
+        return None;
+    }
+
+    let action = match r.action.trim().to_ascii_lowercase().as_str() {
+        "exclude" => RuleAction::Exclude,
+        other => {
+            tracing::warn!(action = %other, "unsupported rule action, dropping rule");
+            return None;
+        }
+    };
+
+    let match_process = match &r.match_process {
+        None => None,
+        Some(p) => Some(bridge_pattern_process(p)?),
+    };
+    let match_class = match &r.match_class {
+        None => None,
+        Some(p) => Some(bridge_pattern_text(p)?),
+    };
+    let match_title = match &r.match_title {
+        None => None,
+        Some(p) => Some(bridge_pattern_text(p)?),
+    };
+
+    let match_traits = WindowTraitMask {
+        require_topmost: r.match_traits.require_topmost,
+        require_cloaked: r.match_traits.require_cloaked,
+        require_tool: r.match_traits.require_tool,
+        require_owned: r.match_traits.require_owned,
+    };
+
+    Some(WindowRule {
+        match_process,
+        match_class,
+        match_title,
+        match_traits,
+        action,
+    })
 }
 
 fn toml_err(msg: String) -> ConfigError {

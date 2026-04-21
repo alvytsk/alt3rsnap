@@ -58,11 +58,11 @@ Run through every item on Windows before tagging a release. Each checked item sh
 
 Requires `[behavior].middle_click_action = "toggle_maximize"` in `config.toml`; the v0.1 default is `"none"`.
 
-- [ ] Alt + middle-click on a normal window (Notepad, Explorer) toggles maximize/restore.
-- [ ] Alt + middle-click on a maximized window restores it; releasing the middle button does not reach the application (no paste, no middle-click autoscroll in terminals).
-- [ ] Alt + middle-click on an excluded window (per `[exclude].processes` or `[[rules]]`) does nothing and the application receives the middle-click as normal.
-- [ ] Middle-click with `middle_click_action = "none"` passes through.
-- [ ] Unknown `middle_click_action` value (e.g., `"rollup"`) loads with a tracing warn and Alt + middle-click is a no-op.
-- [ ] Middle-click in a browser (tab-close behaviour) still works when Alt is **not** held.
-- [ ] Start Alt + Left-drag and during the drag press the middle button: no stale latch interferes (the drag's `BeginDrag` clears the latch per spec §3.5).
+- [x] Alt + middle-click on a normal window (Notepad, Explorer) toggles maximize/restore.
+- [x] Alt + middle-click on a maximized window restores it; releasing the middle button does not reach the application (no paste, no middle-click autoscroll in terminals).
+- [+] Alt + middle-click on an excluded window (per `[exclude].processes` or `[[rules]]`) does nothing and the application receives the middle-click as normal.
+- [x] Middle-click with `middle_click_action = "none"` passes through.
+- [x] Unknown `middle_click_action` value (e.g., `"rollup"`) loads with a tracing warn and Alt + middle-click is a no-op.
+- [x] Middle-click in a browser (tab-close behaviour) still works when Alt is **not** held.
+- [x] Start Alt + Left-drag and during the drag press the middle button: no stale latch interferes (the drag's `BeginDrag` clears the latch per spec §3.5).
 - [ ] After one Alt + middle-click, wait > 1 second, then press the middle button WITHOUT Alt: the click is NOT swallowed (the 500 ms safety timer cleared the latch).

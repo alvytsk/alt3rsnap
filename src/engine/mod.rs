@@ -7,10 +7,10 @@ pub mod policy;
 pub mod rules;
 pub mod state;
 
-use crate::engine::config::{EngineConfig, MiddleClickAction};
+use crate::engine::config::{CenterMode, EngineConfig, MiddleClickAction};
 use crate::engine::geometry::ResizeAnchor;
 use crate::engine::modifiers::Modifiers;
-use crate::engine::state::{Action, DragMode, Event, State};
+use crate::engine::state::{Action, DragMode, DragOrigin, Event, State};
 
 pub struct Engine {
     state: State,
@@ -117,6 +117,7 @@ impl Engine {
                         hwnd: target.hwnd,
                         initial_rect: target.initial_rect,
                         grab: *cursor,
+                        drag_origin: DragOrigin::PrimaryButton,
                         pending_passthrough: false,
                     };
                 }
@@ -200,11 +201,33 @@ impl Engine {
                         *cursor,
                         self.config.center_fraction,
                     );
-                    let anchor = sector_to_anchor(sector);
 
                     if self.config.raise_on_drag || self.config.policy.raise.matches(self.mods) {
                         actions.push(Action::RaiseWindow { hwnd: target.hwnd });
                     }
+
+                    // center_mode = Move: center sector routes to Moving instead of Resizing.
+                    if sector == crate::engine::geometry::Sector::Center
+                        && self.config.center_mode == CenterMode::Move
+                    {
+                        actions.push(Action::BeginDrag {
+                            hwnd: target.hwnd,
+                            initial_rect: target.initial_rect,
+                            grab: *cursor,
+                            mode: DragMode::Move,
+                        });
+                        actions.push(Action::SwallowEvent);
+                        self.state = State::Moving {
+                            hwnd: target.hwnd,
+                            initial_rect: target.initial_rect,
+                            grab: *cursor,
+                            drag_origin: DragOrigin::CenterMoveMode,
+                            pending_passthrough: false,
+                        };
+                        return actions;
+                    }
+
+                    let anchor = sector_to_anchor(sector, self.config.center_mode);
 
                     actions.push(Action::BeginDrag {
                         hwnd: target.hwnd,
@@ -224,14 +247,21 @@ impl Engine {
                 }
             }
             Event::RightUp => {
-                if let State::Resizing {
-                    hwnd,
-                    pending_passthrough,
-                    ..
-                } = &self.state
-                {
-                    let hwnd = *hwnd;
-                    let pp = *pending_passthrough;
+                let end = match &self.state {
+                    State::Resizing {
+                        hwnd,
+                        pending_passthrough,
+                        ..
+                    } => Some((*hwnd, *pending_passthrough)),
+                    State::Moving {
+                        hwnd,
+                        pending_passthrough,
+                        drag_origin: DragOrigin::CenterMoveMode,
+                        ..
+                    } => Some((*hwnd, *pending_passthrough)),
+                    _ => None,
+                };
+                if let Some((hwnd, pp)) = end {
                     actions.push(Action::EndDrag { hwnd });
                     actions.push(Action::CancelMenuActivation);
                     self.state = if pp { State::PassThrough } else { State::Idle };
@@ -327,14 +357,17 @@ impl Engine {
     }
 }
 
-fn sector_to_anchor(s: crate::engine::geometry::Sector) -> ResizeAnchor {
+fn sector_to_anchor(s: crate::engine::geometry::Sector, center_mode: CenterMode) -> ResizeAnchor {
     use crate::engine::geometry::Sector::*;
     match s {
         TopLeft => ResizeAnchor::TopLeft,
         Top => ResizeAnchor::Top,
         TopRight => ResizeAnchor::TopRight,
         Left => ResizeAnchor::Left,
-        Center => ResizeAnchor::CenterSymmetric,
+        Center => match center_mode {
+            CenterMode::BottomRight => ResizeAnchor::TopLeft,
+            _ => ResizeAnchor::CenterSymmetric,
+        },
         Right => ResizeAnchor::Right,
         BottomLeft => ResizeAnchor::BottomLeft,
         Bottom => ResizeAnchor::Bottom,

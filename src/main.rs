@@ -33,12 +33,16 @@ fn main() {
 
     // Load config and configure the engine first.
     let path = alt3rsnap::config::default_config_path();
-    if let Ok(file) = alt3rsnap::config::load_from_path(&path) {
-        if let Ok(engine_cfg) = file.to_engine_config() {
-            hook::ENGINE.with(|e| {
-                let _ = e.borrow_mut().set_config(engine_cfg);
-            });
-        }
+    match alt3rsnap::config::load_from_path(&path) {
+        Ok(file) => match file.to_engine_config() {
+            Ok(engine_cfg) => {
+                hook::ENGINE.with(|e| {
+                    let _ = e.borrow_mut().set_config(engine_cfg);
+                });
+            }
+            Err(e) => tracing::error!("config conversion failed, using defaults: {e}"),
+        },
+        Err(e) => tracing::error!("config load failed, using defaults: {e}"),
     }
 
     let tool_hwnd = match tool_window::create() {

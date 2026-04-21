@@ -36,8 +36,8 @@ pub fn reload() {
                     crate::adapter::apply_actions(&actions);
                 });
             }
-            Err(e) => eprintln!("engine config conversion failed: {e}"),
+            Err(e) => tracing::error!("config conversion failed, keeping previous: {e}"),
         },
-        Err(e) => eprintln!("config load failed: {e}"),
+        Err(e) => tracing::error!("config load failed, keeping previous: {e}"),
     }
 }
