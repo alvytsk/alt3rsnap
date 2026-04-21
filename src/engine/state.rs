@@ -54,6 +54,9 @@ pub struct DragTarget {
     pub exclude: bool, // precomputed by adapter from rule engine
 }
 
+/// Reason an in-progress drag was aborted by the adapter. Emitted only on hard
+/// failure to continue/apply drag geometry — never for user cancellation, snap
+/// disengagement, or a normal drag end.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragAbortReason {
     TargetInvalid,
@@ -87,7 +90,9 @@ pub enum Event {
     FullscreenFocused,
     FullscreenUnfocused,
     ToggleEnable,
-    DragAborted { reason: DragAbortReason },
+    DragAborted {
+        reason: DragAbortReason,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
