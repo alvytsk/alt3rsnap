@@ -60,6 +60,14 @@ pub unsafe fn resolve_target(cursor: Point) -> Option<DragTarget> {
 }
 
 pub fn apply_actions(actions: &[Action]) -> bool {
+    // Spec §3.5: clear the latch defensively before any BeginDrag in this batch.
+    if actions
+        .iter()
+        .any(|a| matches!(a, Action::BeginDrag { .. }))
+    {
+        swallow_latch().on_begin_drag();
+    }
+
     let mut swallow = false;
     for a in actions {
         match a {
@@ -90,7 +98,21 @@ pub fn apply_actions(actions: &[Action]) -> bool {
             Action::UpdateTrayIcon { enabled } => {
                 crate::tray::set_enabled_flag(*enabled);
             }
+            Action::ToggleMaximize { hwnd } => unsafe {
+                let h = win_api::id_to_hwnd(*hwnd);
+                if win_api::is_zoomed(h) {
+                    win_api::restore(h);
+                } else {
+                    win_api::maximize(h);
+                }
+                swallow_latch().set(now_ms());
+            },
         }
     }
     swallow
+}
+
+fn now_ms() -> u64 {
+    // GetTickCount64 is monotonic, unaffected by system clock adjustment.
+    unsafe { windows::Win32::System::SystemInformation::GetTickCount64() }
 }
