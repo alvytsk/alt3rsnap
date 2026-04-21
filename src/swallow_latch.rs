@@ -43,6 +43,18 @@ impl SwallowLatch {
     pub fn try_swallow(&self, _now_ms: u64) -> bool {
         self.armed.swap(false, Ordering::AcqRel)
     }
+
+    /// Safety clear: if the latch was armed at least `SAFETY_CLEAR_MS` ago,
+    /// clear it. Called from the adapter's `SetTimer` callback (spec §3.4).
+    pub fn on_timer(&self, now_ms: u64) {
+        if !self.is_set() {
+            return;
+        }
+        let armed_at = self.armed_at_ms.load(Ordering::Acquire);
+        if now_ms.saturating_sub(armed_at) >= SAFETY_CLEAR_MS {
+            self.armed.store(false, Ordering::Release);
+        }
+    }
 }
 
 impl Default for SwallowLatch {
