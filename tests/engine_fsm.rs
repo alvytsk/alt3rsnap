@@ -335,3 +335,17 @@ fn middle_down_event_exists_and_carries_cursor_and_target() {
         _ => panic!("expected MiddleDown"),
     }
 }
+
+use alt3rsnap::engine::config::MiddleClickAction;
+
+#[test]
+fn engine_config_default_middle_click_action_is_none() {
+    let cfg = EngineConfig::default();
+    assert_eq!(cfg.middle_click_action, MiddleClickAction::None);
+}
+
+#[test]
+fn middle_click_action_variants() {
+    let _ = MiddleClickAction::None;
+    let _ = MiddleClickAction::ToggleMaximize;
+}
