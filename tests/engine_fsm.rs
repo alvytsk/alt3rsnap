@@ -592,3 +592,22 @@ fn drag_aborted_event_constructs_with_reason() {
         panic!("expected DragAborted");
     }
 }
+
+#[test]
+fn snap_actions_construct_and_carry_payloads() {
+    let r = Rect {
+        left: 0,
+        top: 0,
+        right: 960,
+        bottom: 540,
+    };
+    let s = Action::ShowSnapPreview { rect: r };
+    let h = Action::HideSnapPreview;
+    let a = Action::ApplySnapRect {
+        hwnd: WindowId(7),
+        rect: r,
+    };
+    assert!(matches!(s, Action::ShowSnapPreview { rect } if rect == r));
+    assert!(matches!(h, Action::HideSnapPreview));
+    assert!(matches!(a, Action::ApplySnapRect { hwnd: WindowId(7), rect } if rect == r));
+}

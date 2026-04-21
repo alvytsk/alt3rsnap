@@ -131,6 +131,14 @@ pub enum Action {
     ToggleMaximize {
         hwnd: WindowId,
     },
+    ShowSnapPreview {
+        rect: Rect,
+    },
+    HideSnapPreview,
+    ApplySnapRect {
+        hwnd: WindowId,
+        rect: Rect,
+    },
 }
 
 /// Current modifier state snapshot; updated inline by the engine.

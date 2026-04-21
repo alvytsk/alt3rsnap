@@ -105,6 +105,10 @@ pub fn apply_actions(actions: &[Action]) -> bool {
                 }
                 swallow_latch().set(now_ms());
             },
+            // Slice H2 owns the real behaviour for snap overlay / snap apply.
+            Action::ShowSnapPreview { .. } => {}
+            Action::HideSnapPreview => {}
+            Action::ApplySnapRect { .. } => {}
         }
     }
     swallow
