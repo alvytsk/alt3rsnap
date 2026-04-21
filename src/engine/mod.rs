@@ -317,6 +317,9 @@ impl Engine {
                     *pending_passthrough = false;
                 }
             }
+            Event::DragAborted { .. } => {
+                // Handler logic added in Task C5.
+            }
         }
 
         actions

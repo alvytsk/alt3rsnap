@@ -436,7 +436,7 @@ fn armed_plus_middle_down_with_no_target_is_noop() {
 }
 
 use alt3rsnap::engine::config::CenterMode;
-use alt3rsnap::engine::state::DragOrigin;
+use alt3rsnap::engine::state::{DragAbortReason, DragOrigin};
 
 #[test]
 fn engine_config_default_center_mode_is_symmetric() {
@@ -579,4 +579,16 @@ fn right_down_non_center_with_move_mode_still_resizes() {
         }
     )));
     assert!(matches!(e.state(), State::Resizing { .. }));
+}
+
+#[test]
+fn drag_aborted_event_constructs_with_reason() {
+    let e = Event::DragAborted {
+        reason: DragAbortReason::ApplyGeometryFailed,
+    };
+    if let Event::DragAborted { reason } = e {
+        assert_eq!(reason, DragAbortReason::ApplyGeometryFailed);
+    } else {
+        panic!("expected DragAborted");
+    }
 }

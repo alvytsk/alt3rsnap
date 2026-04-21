@@ -54,6 +54,13 @@ pub struct DragTarget {
     pub exclude: bool, // precomputed by adapter from rule engine
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DragAbortReason {
+    TargetInvalid,
+    CaptureLost,
+    ApplyGeometryFailed,
+}
+
 #[derive(Debug, Clone)]
 pub enum Event {
     KeyChange {
@@ -80,6 +87,7 @@ pub enum Event {
     FullscreenFocused,
     FullscreenUnfocused,
     ToggleEnable,
+    DragAborted { reason: DragAbortReason },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
