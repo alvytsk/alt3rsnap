@@ -1,12 +1,16 @@
 #![cfg(target_os = "windows")]
 
-use std::path::PathBuf;
+use std::os::windows::process::CommandExt;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use tracing::{error, info};
+use windows::core::PCWSTR;
 use windows::Win32::System::Registry::{
     RegCloseKey, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY,
     HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_SZ,
 };
+use windows::Win32::System::Threading::CREATE_NO_WINDOW;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_NAME: &str = "Alt3rSnap";
@@ -16,16 +20,20 @@ fn exe_path() -> PathBuf {
     std::env::current_exe().unwrap_or_default()
 }
 
+fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
 // ---- Run key backend (normal IL) ----
 
-fn run_key_enabled() -> bool {
+pub fn is_normal_enabled() -> bool {
     unsafe {
-        let subkey: Vec<u16> = RUN_KEY.encode_utf16().chain(std::iter::once(0)).collect();
-        let name: Vec<u16> = RUN_NAME.encode_utf16().chain(std::iter::once(0)).collect();
-        let mut hk: HKEY = HKEY::default();
+        let subkey = wide(RUN_KEY);
+        let name = wide(RUN_NAME);
+        let mut hk = HKEY::default();
         if RegOpenKeyExW(
             HKEY_CURRENT_USER,
-            windows::core::PCWSTR(subkey.as_ptr()),
+            PCWSTR(subkey.as_ptr()),
             0,
             KEY_READ,
             &mut hk,
@@ -35,15 +43,8 @@ fn run_key_enabled() -> bool {
             return false;
         }
         let mut size: u32 = 0;
-        let ok = RegQueryValueExW(
-            hk,
-            windows::core::PCWSTR(name.as_ptr()),
-            None,
-            None,
-            None,
-            Some(&mut size),
-        )
-        .is_ok();
+        let ok =
+            RegQueryValueExW(hk, PCWSTR(name.as_ptr()), None, None, None, Some(&mut size)).is_ok();
         let _ = RegCloseKey(hk);
         ok
     }
@@ -51,34 +52,35 @@ fn run_key_enabled() -> bool {
 
 fn run_key_set(enabled: bool) {
     unsafe {
-        let subkey: Vec<u16> = RUN_KEY.encode_utf16().chain(std::iter::once(0)).collect();
-        let name: Vec<u16> = RUN_NAME.encode_utf16().chain(std::iter::once(0)).collect();
-        let mut hk: HKEY = HKEY::default();
-        if RegOpenKeyExW(
+        let subkey = wide(RUN_KEY);
+        let name = wide(RUN_NAME);
+        let mut hk = HKEY::default();
+        if let Err(e) = RegOpenKeyExW(
             HKEY_CURRENT_USER,
-            windows::core::PCWSTR(subkey.as_ptr()),
+            PCWSTR(subkey.as_ptr()),
             0,
             KEY_WRITE,
             &mut hk,
         )
-        .is_err()
+        .ok()
         {
+            error!("autostart: open HKCU\\{} failed: {:?}", RUN_KEY, e);
             return;
         }
         if enabled {
             let exe = exe_path();
-            let val = format!("\"{}\"", exe.to_string_lossy());
-            let val_w: Vec<u16> = val.encode_utf16().chain(std::iter::once(0)).collect();
+            let val = format!("\"{}\"", exe.display());
+            let val_w = wide(&val);
             let bytes = std::slice::from_raw_parts(val_w.as_ptr() as *const u8, val_w.len() * 2);
-            let _ = RegSetValueExW(
-                hk,
-                windows::core::PCWSTR(name.as_ptr()),
-                0,
-                REG_SZ,
-                Some(bytes),
-            );
+            match RegSetValueExW(hk, PCWSTR(name.as_ptr()), 0, REG_SZ, Some(bytes)).ok() {
+                Ok(()) => info!("autostart: Run key set to {}", val),
+                Err(e) => error!("autostart: RegSetValueExW failed: {:?}", e),
+            }
         } else {
-            let _ = RegDeleteValueW(hk, windows::core::PCWSTR(name.as_ptr()));
+            match RegDeleteValueW(hk, PCWSTR(name.as_ptr())).ok() {
+                Ok(()) => info!("autostart: Run key cleared"),
+                Err(e) => error!("autostart: RegDeleteValueW failed: {:?}", e),
+            }
         }
         let _ = RegCloseKey(hk);
     }
@@ -86,18 +88,24 @@ fn run_key_set(enabled: bool) {
 
 // ---- Task Scheduler backend (elevated IL) ----
 
-fn sched_task_enabled() -> bool {
-    Command::new("schtasks.exe")
-        .args(["/Query", "/TN", SCHED_TASK_NAME])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+/// Filesystem check for the Alt3rSnap task. Much faster than spawning `schtasks /Query`
+/// and avoids flashing a console window every time the tray menu opens.
+pub fn is_elevated_enabled() -> bool {
+    let Some(windir) = std::env::var_os("WINDIR") else {
+        return false;
+    };
+    let path = Path::new(&windir)
+        .join("System32")
+        .join("Tasks")
+        .join(SCHED_TASK_NAME);
+    path.exists()
 }
 
 fn sched_task_set(enabled: bool) {
     let exe = exe_path();
-    if enabled {
-        let _ = Command::new("schtasks.exe")
+    let result = if enabled {
+        Command::new("schtasks.exe")
+            .creation_flags(CREATE_NO_WINDOW.0)
             .args([
                 "/Create",
                 "/TN",
@@ -107,23 +115,43 @@ fn sched_task_set(enabled: bool) {
                 "/RL",
                 "HIGHEST",
                 "/TR",
-                &format!("\"{}\"", exe.to_string_lossy()),
+                &format!("\"{}\"", exe.display()),
                 "/F",
             ])
-            .output();
+            .output()
     } else {
-        let _ = Command::new("schtasks.exe")
+        Command::new("schtasks.exe")
+            .creation_flags(CREATE_NO_WINDOW.0)
             .args(["/Delete", "/TN", SCHED_TASK_NAME, "/F"])
-            .output();
+            .output()
+    };
+    match result {
+        Ok(o) if o.status.success() => {
+            info!(
+                "autostart: schtasks {} ok",
+                if enabled { "create" } else { "delete" }
+            );
+        }
+        Ok(o) => {
+            error!(
+                "autostart: schtasks {} exit={:?} stderr={}",
+                if enabled { "create" } else { "delete" },
+                o.status.code(),
+                String::from_utf8_lossy(&o.stderr)
+            );
+        }
+        Err(e) => error!("autostart: schtasks spawn failed: {:?}", e),
     }
 }
 
 // ---- Tray-facing helpers ----
 
 pub fn toggle_normal() {
-    let now = run_key_enabled();
+    let now = is_normal_enabled();
     run_key_set(!now);
-    if !now {
+    // Only clear the elevated backend if it's actually present — otherwise we'd
+    // spawn schtasks.exe on every toggle and block the UI for seconds.
+    if !now && is_elevated_enabled() {
         sched_task_set(false);
     }
 }
@@ -133,16 +161,9 @@ pub fn toggle_elevated() {
         crate::elevate::restart_elevated();
         return;
     }
-    let now = sched_task_enabled();
+    let now = is_elevated_enabled();
     sched_task_set(!now);
-    if !now {
+    if !now && is_normal_enabled() {
         run_key_set(false);
     }
-}
-
-pub fn is_normal_enabled() -> bool {
-    run_key_enabled()
-}
-pub fn is_elevated_enabled() -> bool {
-    sched_task_enabled()
 }

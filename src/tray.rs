@@ -128,15 +128,25 @@ fn show_menu(hwnd: HWND) {
             w!("Enabled"),
         );
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        let autostart_normal = crate::autostart::is_normal_enabled();
+        let autostart_elevated = crate::autostart::is_elevated_enabled();
         let _ = AppendMenuW(
             menu,
-            MF_STRING,
+            if autostart_normal {
+                MF_CHECKED
+            } else {
+                MF_UNCHECKED
+            } | MF_STRING,
             ID_AUTOSTART_NORMAL as usize,
             w!("Autostart on logon"),
         );
         let _ = AppendMenuW(
             menu,
-            MF_STRING,
+            if autostart_elevated {
+                MF_CHECKED
+            } else {
+                MF_UNCHECKED
+            } | MF_STRING,
             ID_AUTOSTART_ELEVATED as usize,
             w!("Autostart as elevated"),
         );
