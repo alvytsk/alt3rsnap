@@ -85,3 +85,34 @@ fn exclude_processes_become_rules() {
     let ec = file.to_engine_config().unwrap();
     assert_eq!(ec.rules.len(), 1);
 }
+
+#[test]
+fn behavior_middle_click_action_defaults_to_none_string() {
+    let cfg = load_from_str("").expect("should parse empty");
+    assert_eq!(cfg.behavior.middle_click_action, "none");
+}
+
+#[test]
+fn behavior_middle_click_action_round_trip() {
+    let cfg = load_from_str(
+        r#"
+        [behavior]
+        middle_click_action = "toggle_maximize"
+    "#,
+    )
+    .unwrap();
+    assert_eq!(cfg.behavior.middle_click_action, "toggle_maximize");
+}
+
+#[test]
+fn behavior_unknown_middle_click_action_preserved_at_file_layer() {
+    let cfg = load_from_str(
+        r#"
+        [behavior]
+        middle_click_action = "roll_up_window"
+    "#,
+    )
+    .unwrap();
+    // File layer preserves the raw string; bridge is where validation happens.
+    assert_eq!(cfg.behavior.middle_click_action, "roll_up_window");
+}

@@ -36,6 +36,7 @@ pub struct Behavior {
     pub enable_resize: bool,
     pub raise_on_drag: bool,
     pub restore_maximized_on_move: bool,
+    pub middle_click_action: String,
 }
 impl Default for Behavior {
     fn default() -> Self {
@@ -44,6 +45,7 @@ impl Default for Behavior {
             enable_resize: true,
             raise_on_drag: false,
             restore_maximized_on_move: true,
+            middle_click_action: "none".into(),
         }
     }
 }
