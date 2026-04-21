@@ -66,3 +66,31 @@ Requires `[behavior].middle_click_action = "toggle_maximize"` in `config.toml`; 
 - [x] Middle-click in a browser (tab-close behaviour) still works when Alt is **not** held.
 - [x] Start Alt + Left-drag and during the drag press the middle button: no stale latch interferes (the drag's `BeginDrag` clears the latch per spec §3.5).
 - [ ] After one Alt + middle-click, wait > 1 second, then press the middle button WITHOUT Alt: the click is NOT swallowed (the 500 ms safety timer cleared the latch).
+
+## Resize modes (v0.2 M2)
+
+Set `[resize].center_mode` in `config.toml`; default is `"symmetric"` (already covered under Core move/resize).
+
+- [ ] `center_mode = "bottom_right"` — center-sector Alt + right-drag keeps the **bottom-right corner fixed**; top-left moves by `(-Δx, -Δy)`.
+- [ ] `center_mode = "bottom_right"` — the 8 outer sectors still resize from their correct anchor (behaviour unchanged from symmetric).
+- [ ] `center_mode = "move"` — center-sector Alt + right-drag **moves** the window instead of resizing.
+- [ ] `center_mode = "move"` — the 8 outer sectors still resize normally (only the center sector changes routing).
+- [ ] Unknown `center_mode` value (e.g., `"closest_edge"`) loads with a tracing warn and the center sector falls back to `"symmetric"`.
+- [ ] Edit `center_mode` in the config file, tray → "Reload config" → new mode takes effect on the next drag without restart.
+
+## Rules TOML (v0.2 M3)
+
+`[[rules]]` entries with `match_process` / `match_class` / `match_title` (each `exact` / `glob` / `regex`), optional `match_traits`, and `action = "exclude"`.
+
+- [ ] `[[rules]] match_process = { glob = "chrome*.exe" }` + `action = "exclude"` blocks dragging Chrome while other apps still drag normally.
+- [ ] `[[rules]] match_class = { regex = "^ConsoleWindowClass$" }` blocks dragging legacy `cmd.exe`.
+- [x] `[[rules]] match_class = { glob = "*XamlExplorerHost*" }` blocks dragging the **Windows 11 Alt+Tab task switcher**. *(verified 2026-04-21)*
+- [x] `[[rules]] match_class = { glob = "*MultitaskingView*" }` blocks dragging the **Windows 10 classic Alt+Tab/Task View** surface.
+- [ ] `[[rules]] match_traits = { require_tool = true }` + `action = "exclude"` blocks dragging tool-style windows (e.g., floating palette in Paint.NET).
+- [ ] Case-insensitive process match: `match_process = { exact = "NOTEPAD.EXE" }` (upper-case) matches a running `notepad.exe`.
+- [ ] Both `[exclude].processes` and `[[rules]]` defined → exclude entries evaluate **before** `[[rules]]` (first match wins per spec §4.2 step 8).
+- [ ] Unknown action value, e.g., `action = "include_only"` → that rule is dropped with a tracing warn; other rules still apply; config still loads.
+- [ ] Bad regex, e.g., `match_process = { regex = "[" }` → that rule is dropped with a tracing warn; other rules still apply.
+- [ ] Matcher-less rule (`[[rules]] action = "exclude"` with no `match_*` fields) → dropped silently; no window gets excluded by it.
+- [ ] `[[rules]]` with `action` field missing entirely → config load **fails** with a TOML parse error (`missing field \`action\``) and the previous config stays active (no silent behavioural flip).
+- [ ] Edit `[[rules]]` in the config file, tray → "Reload config" → new rules take effect on the next drag-target resolution without restart.
