@@ -161,13 +161,7 @@ impl FileConfig {
             })
             .collect();
 
-        if self.resize.center_mode != "symmetric" {
-            return Err(toml_err(format!(
-                "center_mode='{}' is not implemented in v0.1 (only 'symmetric')",
-                self.resize.center_mode
-            )));
-        }
-
+        let center_mode = parse_center_mode(&self.resize.center_mode);
         let middle_click_action = parse_middle_click_action(&self.behavior.middle_click_action);
 
         Ok(EngineConfig {
@@ -179,6 +173,7 @@ impl FileConfig {
             policy,
             rules,
             center_fraction: self.resize.center_fraction.clamp(0.0, 1.0),
+            center_mode,
             middle_click_action,
         })
     }
@@ -200,6 +195,22 @@ fn parse_modifier_string(s: &str) -> Option<Modifiers> {
         None
     } else {
         Some(result)
+    }
+}
+
+fn parse_center_mode(s: &str) -> crate::engine::config::CenterMode {
+    use crate::engine::config::CenterMode as C;
+    match s.trim().to_ascii_lowercase().as_str() {
+        "" | "symmetric" => C::Symmetric,
+        "bottom_right" => C::BottomRight,
+        "move" => C::Move,
+        other => {
+            tracing::warn!(
+                value = %other,
+                "unknown resize.center_mode; defaulting to \"symmetric\""
+            );
+            C::Symmetric
+        }
     }
 }
 
