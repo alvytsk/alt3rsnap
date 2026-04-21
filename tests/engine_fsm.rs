@@ -349,3 +349,92 @@ fn middle_click_action_variants() {
     let _ = MiddleClickAction::None;
     let _ = MiddleClickAction::ToggleMaximize;
 }
+
+fn armed_engine_with_toggle_maximize() -> Engine {
+    let cfg = EngineConfig {
+        middle_click_action: MiddleClickAction::ToggleMaximize,
+        ..Default::default()
+    };
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    assert!(matches!(e.state(), State::Armed));
+    e
+}
+
+#[test]
+fn armed_plus_middle_down_on_normal_window_emits_toggle_and_swallow() {
+    let mut e = armed_engine_with_toggle_maximize();
+    let actions = e.handle(Event::MiddleDown {
+        cursor: Point { x: 150, y: 150 },
+        target: Some(default_target()),
+    });
+    assert_eq!(
+        actions,
+        vec![
+            Action::ToggleMaximize {
+                hwnd: WindowId(1),
+            },
+            Action::SwallowEvent,
+        ]
+    );
+    assert!(matches!(e.state(), State::Armed));
+}
+
+#[test]
+fn armed_plus_middle_down_on_excluded_window_is_noop() {
+    let mut e = armed_engine_with_toggle_maximize();
+    let mut target = default_target();
+    target.exclude = true;
+    let actions = e.handle(Event::MiddleDown {
+        cursor: Point { x: 150, y: 150 },
+        target: Some(target),
+    });
+    assert!(actions.is_empty());
+    assert!(matches!(e.state(), State::Armed));
+}
+
+#[test]
+fn armed_plus_middle_down_with_action_none_is_noop() {
+    // Default EngineConfig has middle_click_action = None.
+    let mut e = Engine::new(EngineConfig::default());
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    assert!(matches!(e.state(), State::Armed));
+    let actions = e.handle(Event::MiddleDown {
+        cursor: Point { x: 150, y: 150 },
+        target: Some(default_target()),
+    });
+    assert!(actions.is_empty());
+    assert!(matches!(e.state(), State::Armed));
+}
+
+#[test]
+fn idle_plus_middle_down_is_noop_even_with_toggle_maximize() {
+    let cfg = EngineConfig {
+        middle_click_action: MiddleClickAction::ToggleMaximize,
+        ..Default::default()
+    };
+    let mut e = Engine::new(cfg);
+    // No Alt press → Idle.
+    assert!(matches!(e.state(), State::Idle));
+    let actions = e.handle(Event::MiddleDown {
+        cursor: Point { x: 150, y: 150 },
+        target: Some(default_target()),
+    });
+    assert!(actions.is_empty());
+}
+
+#[test]
+fn armed_plus_middle_down_with_no_target_is_noop() {
+    let mut e = armed_engine_with_toggle_maximize();
+    let actions = e.handle(Event::MiddleDown {
+        cursor: Point { x: 150, y: 150 },
+        target: None,
+    });
+    assert!(actions.is_empty());
+}
