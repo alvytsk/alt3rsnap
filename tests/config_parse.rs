@@ -117,6 +117,96 @@ fn behavior_unknown_middle_click_action_preserved_at_file_layer() {
     assert_eq!(cfg.behavior.middle_click_action, "roll_up_window");
 }
 
+use alt3rsnap::engine::config::CenterMode;
+
+#[test]
+fn resize_center_mode_defaults_to_symmetric_string() {
+    let cfg = load_from_str("").expect("should parse empty");
+    assert_eq!(cfg.resize.center_mode, "symmetric");
+}
+
+#[test]
+fn resize_center_mode_round_trip_bottom_right() {
+    let cfg = load_from_str(
+        r#"
+        [resize]
+        center_mode = "bottom_right"
+    "#,
+    )
+    .unwrap();
+    assert_eq!(cfg.resize.center_mode, "bottom_right");
+}
+
+#[test]
+fn resize_center_mode_round_trip_move() {
+    let cfg = load_from_str(
+        r#"
+        [resize]
+        center_mode = "move"
+    "#,
+    )
+    .unwrap();
+    assert_eq!(cfg.resize.center_mode, "move");
+}
+
+#[test]
+fn bridge_center_mode_symmetric() {
+    let mut file = FileConfig::default();
+    file.resize.center_mode = "symmetric".into();
+    let ec = file.to_engine_config().expect("bridge ok");
+    assert_eq!(ec.center_mode, CenterMode::Symmetric);
+}
+
+#[test]
+fn bridge_center_mode_bottom_right() {
+    let mut file = FileConfig::default();
+    file.resize.center_mode = "bottom_right".into();
+    let ec = file.to_engine_config().expect("bridge ok");
+    assert_eq!(ec.center_mode, CenterMode::BottomRight);
+}
+
+#[test]
+fn bridge_center_mode_move() {
+    let mut file = FileConfig::default();
+    file.resize.center_mode = "move".into();
+    let ec = file.to_engine_config().expect("bridge ok");
+    assert_eq!(ec.center_mode, CenterMode::Move);
+}
+
+#[test]
+fn bridge_center_mode_unknown_defaults_to_symmetric() {
+    let mut file = FileConfig::default();
+    file.resize.center_mode = "closest_edge".into();
+    let ec = file
+        .to_engine_config()
+        .expect("bridge must not error on unknown center_mode");
+    assert_eq!(ec.center_mode, CenterMode::Symmetric);
+}
+
+#[test]
+fn bridge_center_mode_empty_defaults_to_symmetric() {
+    let mut file = FileConfig::default();
+    file.resize.center_mode = "".into();
+    let ec = file.to_engine_config().expect("bridge ok");
+    assert_eq!(ec.center_mode, CenterMode::Symmetric);
+}
+
+#[test]
+fn v01_config_without_center_mode_uses_symmetric_default() {
+    // A v0.1 config that never sets center_mode must still load cleanly.
+    let cfg = load_from_str(
+        r#"
+        [activation]
+        modifier = "alt"
+        [behavior]
+        enable_move = true
+    "#,
+    )
+    .unwrap();
+    let ec = cfg.to_engine_config().expect("v0.1 config ok on v0.2 code");
+    assert_eq!(ec.center_mode, CenterMode::Symmetric);
+}
+
 use alt3rsnap::engine::config::MiddleClickAction;
 
 #[test]
