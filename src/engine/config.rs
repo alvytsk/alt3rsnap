@@ -9,6 +9,13 @@ pub enum MiddleClickAction {
     ToggleMaximize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CenterMode {
+    Symmetric,
+    BottomRight,
+    Move,
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub enabled: bool,
@@ -19,6 +26,7 @@ pub struct EngineConfig {
     pub policy: ActivationPolicy,
     pub rules: Vec<WindowRule>,
     pub center_fraction: f32,
+    pub center_mode: CenterMode,
     pub middle_click_action: MiddleClickAction,
 }
 
@@ -33,6 +41,7 @@ impl Default for EngineConfig {
             policy: ActivationPolicy::default(),
             rules: Vec::new(),
             center_fraction: 1.0 / 3.0,
+            center_mode: CenterMode::Symmetric,
             middle_click_action: MiddleClickAction::None,
         }
     }
