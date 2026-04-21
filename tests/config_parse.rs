@@ -116,3 +116,48 @@ fn behavior_unknown_middle_click_action_preserved_at_file_layer() {
     // File layer preserves the raw string; bridge is where validation happens.
     assert_eq!(cfg.behavior.middle_click_action, "roll_up_window");
 }
+
+use alt3rsnap::engine::config::MiddleClickAction;
+
+#[test]
+fn bridge_middle_click_action_none() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "none".into();
+    let engine = file.to_engine_config().expect("bridge ok");
+    assert_eq!(engine.middle_click_action, MiddleClickAction::None);
+}
+
+#[test]
+fn bridge_middle_click_action_toggle_maximize() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "toggle_maximize".into();
+    let engine = file.to_engine_config().expect("bridge ok");
+    assert_eq!(engine.middle_click_action, MiddleClickAction::ToggleMaximize);
+}
+
+#[test]
+fn bridge_middle_click_action_unknown_defaults_to_none() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "maximize_or_something".into();
+    // Bridge must succeed (warn-and-default, not error) on unknown strings.
+    let engine = file
+        .to_engine_config()
+        .expect("bridge must not error on unknown middle_click_action");
+    assert_eq!(engine.middle_click_action, MiddleClickAction::None);
+}
+
+#[test]
+fn bridge_middle_click_action_empty_defaults_to_none() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "".into();
+    let engine = file.to_engine_config().expect("bridge ok");
+    assert_eq!(engine.middle_click_action, MiddleClickAction::None);
+}
+
+#[test]
+fn bridge_middle_click_action_case_insensitive() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "Toggle_Maximize".into();
+    let engine = file.to_engine_config().expect("bridge ok");
+    assert_eq!(engine.middle_click_action, MiddleClickAction::ToggleMaximize);
+}

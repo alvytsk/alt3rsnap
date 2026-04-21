@@ -168,6 +168,8 @@ impl FileConfig {
             )));
         }
 
+        let middle_click_action = parse_middle_click_action(&self.behavior.middle_click_action);
+
         Ok(EngineConfig {
             enabled: true,
             enable_move: self.behavior.enable_move,
@@ -177,7 +179,7 @@ impl FileConfig {
             policy,
             rules,
             center_fraction: self.resize.center_fraction.clamp(0.0, 1.0),
-            middle_click_action: crate::engine::config::MiddleClickAction::None,
+            middle_click_action,
         })
     }
 }
@@ -198,6 +200,21 @@ fn parse_modifier_string(s: &str) -> Option<Modifiers> {
         None
     } else {
         Some(result)
+    }
+}
+
+fn parse_middle_click_action(s: &str) -> crate::engine::config::MiddleClickAction {
+    use crate::engine::config::MiddleClickAction as M;
+    match s.trim().to_ascii_lowercase().as_str() {
+        "" | "none" => M::None,
+        "toggle_maximize" => M::ToggleMaximize,
+        other => {
+            tracing::warn!(
+                value = %other,
+                "unknown behavior.middle_click_action; defaulting to \"none\""
+            );
+            M::None
+        }
     }
 }
 
