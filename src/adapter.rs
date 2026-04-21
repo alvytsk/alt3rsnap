@@ -5,6 +5,7 @@ use crate::win_api;
 use alt3rsnap::engine::geometry::Point;
 use alt3rsnap::engine::rules::{evaluate, RuleAction};
 use alt3rsnap::engine::state::{Action, DragTarget};
+use alt3rsnap::swallow_latch::SwallowLatch;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -12,6 +13,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use windows::Win32::Foundation::HWND;
 
 static LAST_BALLOON_EPOCH_SECS: AtomicU64 = AtomicU64::new(0);
+
+static SWALLOW_LATCH: std::sync::OnceLock<SwallowLatch> = std::sync::OnceLock::new();
+
+pub fn swallow_latch() -> &'static SwallowLatch {
+    SWALLOW_LATCH.get_or_init(SwallowLatch::new)
+}
 
 fn maybe_balloon_uipi() {
     let now = SystemTime::now()
