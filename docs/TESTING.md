@@ -60,8 +60,7 @@ Requires `[behavior].middle_click_action = "toggle_maximize"` in `config.toml`; 
 
 - [x] Alt + middle-click on a normal window (Notepad, Explorer) toggles maximize/restore.
 - [x] Alt + middle-click on a maximized window restores it; releasing the middle button does not reach the application (no paste, no middle-click autoscroll in terminals).
-- [!!!] Alt + middle-click on an excluded window (per `[exclude].processes` or `[[rules]]`) does nothing and the application receives the middle-click as normal.
-If I add processes = [notepad.exe] then i lost middle button functions in all windows. 
+- [+] Alt + middle-click on an excluded window (per `[exclude].processes` or `[[rules]]`) does nothing and the application receives the middle-click as normal.
 - [x] Middle-click with `middle_click_action = "none"` passes through.
 - [x] Unknown `middle_click_action` value (e.g., `"rollup"`) loads with a tracing warn and Alt + middle-click is a no-op.
 - [x] Middle-click in a browser (tab-close behaviour) still works when Alt is **not** held.
