@@ -7,7 +7,7 @@ pub mod policy;
 pub mod rules;
 pub mod state;
 
-use crate::engine::config::EngineConfig;
+use crate::engine::config::{EngineConfig, MiddleClickAction};
 use crate::engine::geometry::ResizeAnchor;
 use crate::engine::modifiers::Modifiers;
 use crate::engine::state::{Action, DragMode, Event, State};
@@ -119,6 +119,23 @@ impl Engine {
                         grab: *cursor,
                         pending_passthrough: false,
                     };
+                }
+            }
+            Event::MiddleDown { cursor: _, target } => {
+                if let State::Armed = self.state {
+                    let Some(target) = target.clone() else {
+                        return actions;
+                    };
+                    if target.exclude {
+                        return actions;
+                    }
+                    match self.config.middle_click_action {
+                        MiddleClickAction::None => {}
+                        MiddleClickAction::ToggleMaximize => {
+                            actions.push(Action::ToggleMaximize { hwnd: target.hwnd });
+                            actions.push(Action::SwallowEvent);
+                        }
+                    }
                 }
             }
             Event::MouseMove { cursor } => {

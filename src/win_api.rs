@@ -20,8 +20,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GetAncestor, GetClassNameW, GetWindowLongPtrW, GetWindowRect,
     GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsZoomed, SetForegroundWindow,
     SetWindowPos, ShowWindow, WindowFromPoint, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, HWND_TOP,
-    SWP_NOACTIVATE, SWP_NOSENDCHANGING, SWP_NOZORDER, SW_RESTORE, WINDOW_EX_STYLE, WINDOW_STYLE,
-    WS_CAPTION, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_OVERLAPPEDWINDOW,
+    SWP_NOACTIVATE, SWP_NOSENDCHANGING, SWP_NOZORDER, SW_MAXIMIZE, SW_RESTORE, WINDOW_EX_STYLE,
+    WINDOW_STYLE, WS_CAPTION, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_OVERLAPPEDWINDOW,
 };
 
 pub fn to_win_point(p: GPoint) -> POINT {
@@ -165,6 +165,10 @@ pub unsafe fn is_zoomed(hwnd: HWND) -> bool {
 
 pub unsafe fn restore(hwnd: HWND) {
     let _ = ShowWindow(hwnd, SW_RESTORE);
+}
+
+pub unsafe fn maximize(hwnd: HWND) {
+    let _ = ShowWindow(hwnd, SW_MAXIMIZE);
 }
 
 pub unsafe fn raise(hwnd: HWND) {

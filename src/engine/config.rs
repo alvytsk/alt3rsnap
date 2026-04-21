@@ -3,6 +3,12 @@
 use crate::engine::policy::ActivationPolicy;
 use crate::engine::rules::WindowRule;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MiddleClickAction {
+    None,
+    ToggleMaximize,
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub enabled: bool,
@@ -13,6 +19,7 @@ pub struct EngineConfig {
     pub policy: ActivationPolicy,
     pub rules: Vec<WindowRule>,
     pub center_fraction: f32,
+    pub middle_click_action: MiddleClickAction,
 }
 
 impl Default for EngineConfig {
@@ -26,6 +33,7 @@ impl Default for EngineConfig {
             policy: ActivationPolicy::default(),
             rules: Vec::new(),
             center_fraction: 1.0 / 3.0,
+            middle_click_action: MiddleClickAction::None,
         }
     }
 }

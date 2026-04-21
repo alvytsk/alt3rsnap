@@ -85,3 +85,85 @@ fn exclude_processes_become_rules() {
     let ec = file.to_engine_config().unwrap();
     assert_eq!(ec.rules.len(), 1);
 }
+
+#[test]
+fn behavior_middle_click_action_defaults_to_none_string() {
+    let cfg = load_from_str("").expect("should parse empty");
+    assert_eq!(cfg.behavior.middle_click_action, "none");
+}
+
+#[test]
+fn behavior_middle_click_action_round_trip() {
+    let cfg = load_from_str(
+        r#"
+        [behavior]
+        middle_click_action = "toggle_maximize"
+    "#,
+    )
+    .unwrap();
+    assert_eq!(cfg.behavior.middle_click_action, "toggle_maximize");
+}
+
+#[test]
+fn behavior_unknown_middle_click_action_preserved_at_file_layer() {
+    let cfg = load_from_str(
+        r#"
+        [behavior]
+        middle_click_action = "roll_up_window"
+    "#,
+    )
+    .unwrap();
+    // File layer preserves the raw string; bridge is where validation happens.
+    assert_eq!(cfg.behavior.middle_click_action, "roll_up_window");
+}
+
+use alt3rsnap::engine::config::MiddleClickAction;
+
+#[test]
+fn bridge_middle_click_action_none() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "none".into();
+    let engine = file.to_engine_config().expect("bridge ok");
+    assert_eq!(engine.middle_click_action, MiddleClickAction::None);
+}
+
+#[test]
+fn bridge_middle_click_action_toggle_maximize() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "toggle_maximize".into();
+    let engine = file.to_engine_config().expect("bridge ok");
+    assert_eq!(
+        engine.middle_click_action,
+        MiddleClickAction::ToggleMaximize
+    );
+}
+
+#[test]
+fn bridge_middle_click_action_unknown_defaults_to_none() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "maximize_or_something".into();
+    // Bridge must succeed (warn-and-default, not error) on unknown strings.
+    let engine = file
+        .to_engine_config()
+        .expect("bridge must not error on unknown middle_click_action");
+    assert_eq!(engine.middle_click_action, MiddleClickAction::None);
+}
+
+#[test]
+fn bridge_middle_click_action_empty_defaults_to_none() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "".into();
+    let engine = file.to_engine_config().expect("bridge ok");
+    assert_eq!(engine.middle_click_action, MiddleClickAction::None);
+}
+
+#[test]
+fn bridge_middle_click_action_case_insensitive() {
+    let mut file = FileConfig::default();
+    file.behavior.middle_click_action = "Toggle_Maximize".into();
+    let engine = file.to_engine_config().expect("bridge ok");
+    assert_eq!(
+        engine.middle_click_action,
+        MiddleClickAction::ToggleMaximize
+    );
+}

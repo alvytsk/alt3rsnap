@@ -63,6 +63,10 @@ pub enum Event {
         target: Option<DragTarget>,
     },
     RightUp,
+    MiddleDown {
+        cursor: Point,
+        target: Option<DragTarget>,
+    },
     MouseMove {
         cursor: Point,
     },
@@ -103,6 +107,9 @@ pub enum Action {
     SwallowEvent,
     UpdateTrayIcon {
         enabled: bool,
+    },
+    ToggleMaximize {
+        hwnd: WindowId,
     },
 }
 
