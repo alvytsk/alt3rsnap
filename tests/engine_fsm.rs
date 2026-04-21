@@ -613,6 +613,50 @@ fn snap_actions_construct_and_carry_payloads() {
 }
 
 #[test]
+fn begin_drag_carries_optional_snap_context() {
+    use alt3rsnap::engine::snap::SnapContext;
+    let r = Rect {
+        left: 0,
+        top: 0,
+        right: 800,
+        bottom: 600,
+    };
+    let a = Action::BeginDrag {
+        hwnd: WindowId(1),
+        initial_rect: r,
+        grab: Point { x: 10, y: 10 },
+        mode: DragMode::Move,
+        snap: None as Option<SnapContext>,
+    };
+    assert!(matches!(a, Action::BeginDrag { snap: None, .. }));
+}
+
+#[test]
+fn moving_state_carries_optional_snap_session() {
+    use alt3rsnap::engine::snap::SnapSession;
+    let s = State::Moving {
+        hwnd: WindowId(1),
+        initial_rect: Rect {
+            left: 0,
+            top: 0,
+            right: 1,
+            bottom: 1,
+        },
+        grab: Point { x: 0, y: 0 },
+        drag_origin: DragOrigin::PrimaryButton,
+        pending_passthrough: false,
+        snap_session: None as Option<SnapSession>,
+    };
+    assert!(matches!(
+        s,
+        State::Moving {
+            snap_session: None,
+            ..
+        }
+    ));
+}
+
+#[test]
 fn snap_scaffold_types_exist_and_round_trip() {
     use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot, SnapZone, SnapZoneId};
     let mi = MonitorInfo {

@@ -111,6 +111,7 @@ impl Engine {
                         initial_rect: target.initial_rect,
                         grab: *cursor,
                         mode: DragMode::Move,
+                        snap: None,
                     });
                     actions.push(Action::SwallowEvent);
 
@@ -120,6 +121,7 @@ impl Engine {
                         grab: *cursor,
                         drag_origin: DragOrigin::PrimaryButton,
                         pending_passthrough: false,
+                        snap_session: None,
                     };
                 }
             }
@@ -216,6 +218,7 @@ impl Engine {
                             initial_rect: target.initial_rect,
                             grab: *cursor,
                             mode: DragMode::Move,
+                            snap: None,
                         });
                         actions.push(Action::SwallowEvent);
                         self.state = State::Moving {
@@ -224,6 +227,7 @@ impl Engine {
                             grab: *cursor,
                             drag_origin: DragOrigin::CenterMoveMode,
                             pending_passthrough: false,
+                            snap_session: None,
                         };
                         return actions;
                     }
@@ -235,6 +239,7 @@ impl Engine {
                         initial_rect: target.initial_rect,
                         grab: *cursor,
                         mode: DragMode::Resize { anchor },
+                        snap: None,
                     });
                     actions.push(Action::SwallowEvent);
 

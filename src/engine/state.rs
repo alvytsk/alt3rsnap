@@ -2,6 +2,7 @@
 
 use crate::engine::geometry::{Point, Rect, ResizeAnchor};
 use crate::engine::modifiers::Modifiers;
+use crate::engine::snap::{SnapContext, SnapSession};
 
 /// Opaque wrapper over the adapter's window handle. The engine is handle-agnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -34,6 +35,7 @@ pub enum State {
         grab: Point,
         drag_origin: DragOrigin,
         pending_passthrough: bool,
+        snap_session: Option<SnapSession>,
     },
     Resizing {
         hwnd: WindowId,
@@ -108,6 +110,7 @@ pub enum Action {
         initial_rect: Rect,
         grab: Point,
         mode: DragMode,
+        snap: Option<SnapContext>,
     },
     UpdateDrag {
         hwnd: WindowId,

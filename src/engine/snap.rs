@@ -46,7 +46,7 @@ pub struct EngagedZone {
 }
 
 /// Immutable-per-drag inputs to snap evaluation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnapContext {
     pub monitors: MonitorSnapshot,
     pub zones: Vec<SnapZone>,
@@ -60,7 +60,7 @@ pub struct SnapContext {
 }
 
 /// Mutable-per-drag snap state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnapSession {
     pub ctx: SnapContext,
     pub engaged: Option<EngagedZone>,
