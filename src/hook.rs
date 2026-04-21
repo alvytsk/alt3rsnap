@@ -12,8 +12,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT,
-    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN,
+    WM_SYSKEYUP,
 };
 
 use alt3rsnap::engine::config::EngineConfig;
@@ -62,6 +63,15 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
         y: info.pt.y,
     };
 
+    // Middle-up is handled entirely by the adapter latch (spec §2.9, §3.3).
+    if (wparam.0 as u32) == WM_MBUTTONUP {
+        let now = windows::Win32::System::SystemInformation::GetTickCount64();
+        if crate::adapter::swallow_latch().try_swallow(now) {
+            return LRESULT(1);
+        }
+        return CallNextHookEx(None, code, wparam, lparam);
+    }
+
     let event = match wparam.0 as u32 {
         WM_MOUSEMOVE => Some(Event::MouseMove { cursor }),
         WM_LBUTTONDOWN => {
@@ -69,6 +79,10 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
             Some(Event::LeftDown { cursor, target })
         }
         WM_LBUTTONUP => Some(Event::LeftUp),
+        WM_MBUTTONDOWN => {
+            let target = crate::adapter::resolve_target(cursor);
+            Some(Event::MiddleDown { cursor, target })
+        }
         WM_RBUTTONDOWN => {
             let target = crate::adapter::resolve_target(cursor);
             Some(Event::RightDown { cursor, target })
