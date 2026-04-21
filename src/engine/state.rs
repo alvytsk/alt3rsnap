@@ -104,6 +104,9 @@ pub enum Action {
     UpdateTrayIcon {
         enabled: bool,
     },
+    ToggleMaximize {
+        hwnd: WindowId,
+    },
 }
 
 /// Current modifier state snapshot; updated inline by the engine.

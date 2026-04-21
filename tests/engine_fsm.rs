@@ -307,3 +307,15 @@ fn set_config_disabling_stops_engine() {
     assert!(matches!(e.state(), State::Disabled));
     assert!(acts.contains(&Action::UpdateTrayIcon { enabled: false }));
 }
+
+#[test]
+fn toggle_maximize_action_exists_and_carries_window_id() {
+    let a = Action::ToggleMaximize {
+        hwnd: WindowId(42),
+    };
+    if let Action::ToggleMaximize { hwnd } = a {
+        assert_eq!(hwnd, WindowId(42));
+    } else {
+        panic!("expected ToggleMaximize");
+    }
+}
