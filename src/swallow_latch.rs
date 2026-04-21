@@ -55,6 +55,12 @@ impl SwallowLatch {
             self.armed.store(false, Ordering::Release);
         }
     }
+
+    /// Clear the latch when a new drag begins (spec §3.5). A brand-new drag
+    /// must never inherit a stale latch from a prior action batch.
+    pub fn on_begin_drag(&self) {
+        self.armed.store(false, Ordering::Release);
+    }
 }
 
 impl Default for SwallowLatch {

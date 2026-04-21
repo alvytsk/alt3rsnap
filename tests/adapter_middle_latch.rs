@@ -47,3 +47,19 @@ fn on_timer_preserves_latch_if_safety_not_elapsed() {
     // And a subsequent try_swallow still succeeds.
     assert!(latch.try_swallow(5_101));
 }
+
+#[test]
+fn on_begin_drag_clears_stale_latch() {
+    let latch = SwallowLatch::new();
+    latch.set(1_000);
+    assert!(latch.is_set());
+    latch.on_begin_drag();
+    assert!(!latch.is_set());
+}
+
+#[test]
+fn on_begin_drag_without_arm_is_noop() {
+    let latch = SwallowLatch::new();
+    latch.on_begin_drag();
+    assert!(!latch.is_set());
+}
