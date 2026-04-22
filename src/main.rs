@@ -19,6 +19,8 @@ mod hook;
 #[cfg(windows)]
 mod monitors;
 #[cfg(windows)]
+mod overlay;
+#[cfg(windows)]
 mod tool_window;
 #[cfg(windows)]
 mod tray;
@@ -66,6 +68,17 @@ fn main() {
             std::process::exit(1);
         }
     };
+
+    // Register the snap-preview overlay class and set initial opacity from config.
+    unsafe {
+        use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+        if let Ok(hmod) = GetModuleHandleW(None) {
+            let hinstance: windows::Win32::Foundation::HINSTANCE = hmod.into();
+            overlay::register_class(hinstance);
+            let opacity = adapter_config_handle().lock().unwrap().preview_opacity;
+            overlay::set_opacity(opacity);
+        }
+    }
 
     hook::install().expect("hook install");
     fullscreen::install();
