@@ -181,3 +181,88 @@ fn disabling_quarters_falls_back_to_top_maximize_at_corner() {
         other => panic!("expected TopMaximize fallback, got {:?}", other),
     }
 }
+
+#[test]
+fn restore_guard_suppresses_engage_until_16px_movement() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    s.ctx.restore_guard_active = true;
+    s.restore_guard_cleared = false;
+    s.ctx.grab = Point { x: 100, y: 100 };
+
+    // Within 16 px of grab — no engagement even near edge.
+    let d1 = evaluate(&mut s, Point { x: 110, y: 100 });
+    assert_eq!(d1, Decision::None);
+    assert!(s.engaged.is_none());
+
+    // Beyond 16 px — evaluation resumes. Still not near edge → None.
+    let d2 = evaluate(&mut s, Point { x: 117, y: 100 });
+    assert_eq!(d2, Decision::None);
+    assert!(s.restore_guard_cleared);
+
+    // Guard latched open — moving to edge engages.
+    let d3 = evaluate(&mut s, Point { x: 5, y: 500 });
+    assert!(matches!(d3, Decision::Engage(ref z) if z.id == SnapZoneId::LeftHalf));
+}
+
+#[test]
+fn space_suspend_hides_preview_and_suppresses_future_engage() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    let _ = evaluate(&mut s, Point { x: 5, y: 500 });
+    assert!(s.engaged.is_some());
+
+    s.suspended = true;
+    let d = evaluate(&mut s, Point { x: 6, y: 500 });
+    assert_eq!(d, Decision::Disengage);
+    assert!(s.engaged.is_none());
+    assert_eq!(s.last_preview_rect, None);
+
+    // While suspended, no engagement.
+    let d2 = evaluate(&mut s, Point { x: 10, y: 500 });
+    assert_eq!(d2, Decision::None);
+
+    // Release Space → next evaluation engages.
+    s.suspended = false;
+    let d3 = evaluate(&mut s, Point { x: 10, y: 500 });
+    assert!(matches!(d3, Decision::Engage(ref z) if z.id == SnapZoneId::LeftHalf));
+}
+
+#[test]
+fn cross_monitor_engages_on_secondary_left_edge() {
+    // Two monitors side-by-side, 1920 each; secondary is at x=1920..3840.
+    let mons = MonitorSnapshot {
+        monitors: vec![
+            mon_1080p(40),
+            MonitorInfo {
+                bounds: Rect {
+                    left: 1920,
+                    top: 0,
+                    right: 3840,
+                    bottom: 1080,
+                },
+                work_area: Rect {
+                    left: 1920,
+                    top: 0,
+                    right: 3840,
+                    bottom: 1040,
+                },
+                scale: 100,
+            },
+        ],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    // Cursor at x=1925 on monitor 2 → within 24 px of its left edge = monitor-2 LeftHalf.
+    let d = evaluate(&mut s, Point { x: 1925, y: 500 });
+    match d {
+        Decision::Engage(z) => {
+            assert_eq!(z.id, SnapZoneId::LeftHalf);
+            assert_eq!(z.target_rect.left, 1920);
+        }
+        other => panic!("expected monitor-2 LeftHalf, got {:?}", other),
+    }
+}
