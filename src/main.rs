@@ -21,6 +21,8 @@ mod tool_window;
 #[cfg(windows)]
 mod tray;
 #[cfg(windows)]
+mod monitors;
+#[cfg(windows)]
 mod win_api;
 
 #[cfg(windows)]
