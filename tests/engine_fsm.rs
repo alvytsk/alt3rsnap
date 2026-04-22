@@ -983,3 +983,93 @@ fn drag_aborted_with_engaged_emits_hide_then_enddrag_no_applysnap() {
     // And state must have exited Moving.
     assert!(!matches!(e.state(), State::Moving { .. }));
 }
+
+#[test]
+fn fullscreen_focused_during_moving_preserves_engaged_until_leftup() {
+    use alt3rsnap::engine::config::EngineConfig;
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let _ = e.handle(Event::LeftDown {
+        cursor: Point { x: 400, y: 400 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 350,
+                top: 350,
+                right: 850,
+                bottom: 700,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    let _ = e.handle(Event::MouseMove {
+        cursor: Point { x: 5, y: 500 },
+    });
+    // FullscreenFocused arrives mid-drag — must NOT exit Moving, just set pending_passthrough.
+    let _ = e.handle(Event::FullscreenFocused);
+    // Still Moving with engagement intact.
+    assert!(matches!(
+        e.state(),
+        State::Moving {
+            snap_session: Some(_),
+            ..
+        }
+    ));
+    if let State::Moving {
+        snap_session: Some(s),
+        pending_passthrough,
+        ..
+    } = e.state()
+    {
+        assert!(
+            s.engaged.is_some(),
+            "engagement must persist through FullscreenFocused"
+        );
+        assert!(
+            *pending_passthrough,
+            "FullscreenFocused must set pending_passthrough"
+        );
+    }
+
+    // LeftUp now commits via the pending_passthrough path — state transitions to PassThrough,
+    // but exit_moving still emits the engaged-teardown sequence.
+    let acts = e.handle(Event::LeftUp);
+    assert!(matches!(e.state(), State::PassThrough));
+    let kinds: Vec<&'static str> = acts
+        .iter()
+        .map(|a| match a {
+            Action::HideSnapPreview => "HideSnapPreview",
+            Action::ApplySnapRect { .. } => "ApplySnapRect",
+            Action::EndDrag { .. } => "EndDrag",
+            _ => "other",
+        })
+        .collect();
+    assert_eq!(
+        &kinds[..3],
+        &["HideSnapPreview", "ApplySnapRect", "EndDrag"]
+    );
+}
