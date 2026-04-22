@@ -240,7 +240,9 @@ pub fn evaluate(session: &mut SnapSession, cursor: Point) -> Decision {
     if session.ctx.restore_guard_active && !session.restore_guard_cleared {
         let dx = cursor.x - session.ctx.grab.x;
         let dy = cursor.y - session.ctx.grab.y;
-        if (dx * dx + dy * dy) < (16 * 16) {
+        // Per-axis short-circuit first: if either axis delta already >= 16, we're out.
+        // Otherwise the squared-distance check is bounded by 16*16 + 16*16 = 512, safe in i32.
+        if dx.abs() < 16 && dy.abs() < 16 && (dx * dx + dy * dy) < (16 * 16) {
             return Decision::None;
         }
         session.restore_guard_cleared = true;
@@ -296,6 +298,8 @@ fn best_candidate(ctx: &SnapContext, cursor: Point, engage_px: i32) -> Option<&S
             continue;
         }
         let pr = priority_rank(z.id);
+        // Strict `<` on priority keeps the first zone seen on equal priority — stable
+        // ordering matches bake order (quarters before halves before thirds).
         best = match best {
             None => Some((z, pr)),
             Some((_, br)) if pr < br => Some((z, pr)),
@@ -324,18 +328,19 @@ fn cursor_eligible(z: &SnapZone, cursor: Point, engage_px: i32, mon: &MonitorInf
             (cursor.x - b.right).abs() <= engage_px && (cursor.y - b.bottom).abs() <= engage_px
         }
         TopMaximize => {
-            (cursor.y - b.top).abs() <= engage_px && cursor.x > b.left && cursor.x < b.right
+            (cursor.y - b.top).abs() <= engage_px && cursor.x >= b.left && cursor.x <= b.right
         }
         BottomMaximize => {
-            (cursor.y - b.bottom).abs() <= engage_px && cursor.x > b.left && cursor.x < b.right
+            (cursor.y - b.bottom).abs() <= engage_px && cursor.x >= b.left && cursor.x <= b.right
         }
         LeftHalf => {
-            (cursor.x - b.left).abs() <= engage_px && cursor.y > b.top && cursor.y < b.bottom
+            (cursor.x - b.left).abs() <= engage_px && cursor.y >= b.top && cursor.y <= b.bottom
         }
         RightHalf => {
-            (cursor.x - b.right).abs() <= engage_px && cursor.y > b.top && cursor.y < b.bottom
+            (cursor.x - b.right).abs() <= engage_px && cursor.y >= b.top && cursor.y <= b.bottom
         }
         LeftThird => (cursor.x - b.left).abs() <= engage_px,
+        // MiddleThird: no edge to probe — eligible whenever cursor is in middle-x band of monitor.
         MiddleThird => {
             cursor.x > b.left + (b.right - b.left) / 3
                 && cursor.x < b.left + 2 * (b.right - b.left) / 3
@@ -358,7 +363,7 @@ fn priority_rank(id: SnapZoneId) -> u8 {
 
 /// Distance from cursor to the nearest edge of the engaged zone's target rect.
 /// When the cursor is outside the rect this is the standard point-to-boundary distance;
-/// when it is inside, it is the minimum distance to any of the four edges (always ≥ 1).
+/// when it is inside, it is the minimum distance to any of the four edges (always ≥ 0).
 fn disengage_distance_to_current(session: &SnapSession, cursor: Point) -> i32 {
     let Some(ez) = &session.engaged else {
         return i32::MAX;
