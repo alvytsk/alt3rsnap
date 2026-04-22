@@ -29,12 +29,13 @@ pub fn reload() {
     let path = config_path();
     let result = alt3rsnap::config::load_from_path(&path);
     match result {
-        Ok(file_cfg) => match file_cfg.to_engine_config() {
-            Ok(ec) => {
+        Ok(file_cfg) => match file_cfg.to_runtime_config() {
+            Ok(runtime) => {
                 crate::hook::ENGINE.with(|e| {
-                    let actions = e.borrow_mut().set_config(ec);
+                    let actions = e.borrow_mut().set_config(runtime.engine);
                     crate::adapter::apply_actions(&actions);
                 });
+                *crate::adapter_config_handle().lock().unwrap() = runtime.adapter;
             }
             Err(e) => tracing::error!("config conversion failed, keeping previous: {e}"),
         },

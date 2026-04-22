@@ -24,6 +24,17 @@ mod tray;
 mod win_api;
 
 #[cfg(windows)]
+use std::sync::{Mutex, OnceLock};
+
+#[cfg(windows)]
+static ADAPTER_CONFIG: OnceLock<Mutex<alt3rsnap::config::AdapterConfig>> = OnceLock::new();
+
+#[cfg(windows)]
+pub fn adapter_config_handle() -> &'static Mutex<alt3rsnap::config::AdapterConfig> {
+    ADAPTER_CONFIG.get_or_init(|| Mutex::new(alt3rsnap::config::AdapterConfig::default()))
+}
+
+#[cfg(windows)]
 fn main() {
     let _log_guard = logging::init();
     logging::install_panic_hook();
@@ -34,11 +45,12 @@ fn main() {
     // Load config and configure the engine first.
     let path = alt3rsnap::config::default_config_path();
     match alt3rsnap::config::load_from_path(&path) {
-        Ok(file) => match file.to_engine_config() {
-            Ok(engine_cfg) => {
+        Ok(file) => match file.to_runtime_config() {
+            Ok(runtime) => {
                 hook::ENGINE.with(|e| {
-                    let _ = e.borrow_mut().set_config(engine_cfg);
+                    let _ = e.borrow_mut().set_config(runtime.engine);
                 });
+                *adapter_config_handle().lock().unwrap() = runtime.adapter;
             }
             Err(e) => tracing::error!("config conversion failed, using defaults: {e}"),
         },
