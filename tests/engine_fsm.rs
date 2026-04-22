@@ -915,3 +915,71 @@ fn space_during_moving_suspends_snap_and_hides_preview() {
         .iter()
         .any(|a| matches!(a, Action::ShowSnapPreview { .. })));
 }
+
+#[test]
+fn drag_aborted_with_engaged_emits_hide_then_enddrag_no_applysnap() {
+    use alt3rsnap::engine::config::EngineConfig;
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let _ = e.handle(Event::LeftDown {
+        cursor: Point { x: 400, y: 400 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 350,
+                top: 350,
+                right: 850,
+                bottom: 700,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    let _ = e.handle(Event::MouseMove {
+        cursor: Point { x: 5, y: 500 },
+    });
+    let acts = e.handle(Event::DragAborted {
+        reason: DragAbortReason::ApplyGeometryFailed,
+    });
+
+    let kinds: Vec<&'static str> = acts
+        .iter()
+        .map(|a| match a {
+            Action::HideSnapPreview => "HideSnapPreview",
+            Action::ApplySnapRect { .. } => "ApplySnapRect",
+            Action::EndDrag { .. } => "EndDrag",
+            _ => "other",
+        })
+        .collect();
+    assert!(kinds.contains(&"HideSnapPreview"));
+    assert!(kinds.contains(&"EndDrag"));
+    assert!(
+        !kinds.contains(&"ApplySnapRect"),
+        "DragAborted must not commit snap"
+    );
+    // And state must have exited Moving.
+    assert!(!matches!(e.state(), State::Moving { .. }));
+}

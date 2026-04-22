@@ -17,9 +17,6 @@ use crate::engine::state::{Action, DragMode, DragOrigin, Event, State, WindowId}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExitMovingReason {
     LeftUp,
-    /// Reserved for Task C5 (`Event::DragAborted` handler). Not yet constructed.
-    // TODO(C5): remove #[allow(dead_code)] once DragAborted is constructed in Event::DragAborted handler.
-    #[allow(dead_code)]
     DragAborted,
     DisabledFromToggle,
     DisabledFromReload,
@@ -434,8 +431,27 @@ impl Engine {
                     *pending_passthrough = false;
                 }
             }
-            Event::DragAborted { .. } => {
-                // Handler logic added in Task C5.
+            Event::DragAborted { reason: _ } => {
+                if matches!(self.state, State::Moving { .. }) {
+                    if let Some((_hwnd, pp)) =
+                        self.exit_moving(ExitMovingReason::DragAborted, &mut actions)
+                    {
+                        self.state = if pp { State::PassThrough } else { State::Idle };
+                        self.reconcile_arm_state(&mut actions);
+                    }
+                } else if let State::Resizing {
+                    hwnd,
+                    pending_passthrough,
+                    ..
+                } = &self.state
+                {
+                    let hwnd = *hwnd;
+                    let pp = *pending_passthrough;
+                    actions.push(Action::EndDrag { hwnd });
+                    actions.push(Action::CancelMenuActivation);
+                    self.state = if pp { State::PassThrough } else { State::Idle };
+                    self.reconcile_arm_state(&mut actions);
+                }
             }
         }
 
