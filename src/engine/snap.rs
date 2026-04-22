@@ -5,6 +5,14 @@ use crate::engine::config::{SnapEngineConfig, ZoneToggles};
 use crate::engine::geometry::{Point, Rect};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Decision {
+    Engage(EngagedZone),
+    Hold,
+    Disengage,
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MonitorInfo {
     pub bounds: Rect,
     pub work_area: Rect,
@@ -214,5 +222,161 @@ fn push_enabled(out: &mut Vec<SnapZone>, z: ZoneToggles, idx: usize, mon: &Monit
                 bottom: wa.bottom,
             },
         );
+    }
+}
+
+/// Returns the decision for this MouseMove; mutates `engaged` / `last_preview_rect`
+/// appropriately. Never returns Engage while `suspended` or while the restore guard
+/// is active.
+pub fn evaluate(session: &mut SnapSession, cursor: Point) -> Decision {
+    if session.suspended {
+        if session.engaged.take().is_some() {
+            session.last_preview_rect = None;
+            return Decision::Disengage;
+        }
+        return Decision::None;
+    }
+
+    if session.ctx.restore_guard_active && !session.restore_guard_cleared {
+        let dx = cursor.x - session.ctx.grab.x;
+        let dy = cursor.y - session.ctx.grab.y;
+        if (dx * dx + dy * dy) < (16 * 16) {
+            return Decision::None;
+        }
+        session.restore_guard_cleared = true;
+    }
+
+    let winner = best_candidate(&session.ctx, cursor, session.ctx.engage_px as i32);
+
+    match (&session.engaged, winner) {
+        (None, None) => Decision::None,
+        (None, Some(z)) => {
+            let ez = EngagedZone {
+                id: z.id,
+                target_rect: z.target_rect,
+                entered_at_cursor: cursor,
+            };
+            session.engaged = Some(ez.clone());
+            session.last_preview_rect = Some(z.target_rect);
+            Decision::Engage(ez)
+        }
+        (Some(cur), Some(z)) if cur.id == z.id => Decision::Hold,
+        (Some(_), Some(z)) => {
+            let ez = EngagedZone {
+                id: z.id,
+                target_rect: z.target_rect,
+                entered_at_cursor: cursor,
+            };
+            session.engaged = Some(ez.clone());
+            session.last_preview_rect = Some(z.target_rect);
+            Decision::Engage(ez)
+        }
+        (Some(_), None) => {
+            let dist_px = disengage_distance_to_current(session, cursor);
+            if dist_px >= session.ctx.disengage_px as i32 {
+                session.engaged = None;
+                session.last_preview_rect = None;
+                Decision::Disengage
+            } else {
+                Decision::Hold
+            }
+        }
+    }
+}
+
+fn best_candidate(ctx: &SnapContext, cursor: Point, engage_px: i32) -> Option<&SnapZone> {
+    let mut best: Option<(&SnapZone, u8)> = None;
+    for z in &ctx.zones {
+        if !cursor_eligible(
+            z,
+            cursor,
+            engage_px,
+            &ctx.monitors.monitors[z.monitor_index],
+        ) {
+            continue;
+        }
+        let pr = priority_rank(z.id);
+        best = match best {
+            None => Some((z, pr)),
+            Some((_, br)) if pr < br => Some((z, pr)),
+            Some(x) => Some(x),
+        };
+    }
+    best.map(|(z, _)| z)
+}
+
+/// True iff the cursor is within `engage_px` of the zone's triggering edge/corner
+/// (edges use `bounds` so auto-hidden taskbar does not defeat the top edge).
+fn cursor_eligible(z: &SnapZone, cursor: Point, engage_px: i32, mon: &MonitorInfo) -> bool {
+    use SnapZoneId::*;
+    let b = mon.bounds;
+    match z.id {
+        TopLeftQuarter => {
+            (cursor.x - b.left).abs() <= engage_px && (cursor.y - b.top).abs() <= engage_px
+        }
+        TopRightQuarter => {
+            (cursor.x - b.right).abs() <= engage_px && (cursor.y - b.top).abs() <= engage_px
+        }
+        BottomLeftQuarter => {
+            (cursor.x - b.left).abs() <= engage_px && (cursor.y - b.bottom).abs() <= engage_px
+        }
+        BottomRightQuarter => {
+            (cursor.x - b.right).abs() <= engage_px && (cursor.y - b.bottom).abs() <= engage_px
+        }
+        TopMaximize => {
+            (cursor.y - b.top).abs() <= engage_px && cursor.x > b.left && cursor.x < b.right
+        }
+        BottomMaximize => {
+            (cursor.y - b.bottom).abs() <= engage_px && cursor.x > b.left && cursor.x < b.right
+        }
+        LeftHalf => {
+            (cursor.x - b.left).abs() <= engage_px && cursor.y > b.top && cursor.y < b.bottom
+        }
+        RightHalf => {
+            (cursor.x - b.right).abs() <= engage_px && cursor.y > b.top && cursor.y < b.bottom
+        }
+        LeftThird => (cursor.x - b.left).abs() <= engage_px,
+        MiddleThird => {
+            cursor.x > b.left + (b.right - b.left) / 3
+                && cursor.x < b.left + 2 * (b.right - b.left) / 3
+        }
+        RightThird => (cursor.x - b.right).abs() <= engage_px,
+    }
+}
+
+/// Lower number = higher priority.
+fn priority_rank(id: SnapZoneId) -> u8 {
+    use SnapZoneId::*;
+    match id {
+        TopLeftQuarter | TopRightQuarter | BottomLeftQuarter | BottomRightQuarter => 0,
+        TopMaximize => 1,
+        BottomMaximize => 2,
+        LeftHalf | RightHalf => 3,
+        LeftThird | MiddleThird | RightThird => 4,
+    }
+}
+
+/// Distance from cursor to the nearest edge of the engaged zone's target rect.
+/// When the cursor is outside the rect this is the standard point-to-boundary distance;
+/// when it is inside, it is the minimum distance to any of the four edges (always ≥ 1).
+fn disengage_distance_to_current(session: &SnapSession, cursor: Point) -> i32 {
+    let Some(ez) = &session.engaged else {
+        return i32::MAX;
+    };
+    let r = ez.target_rect;
+    let inside_x = cursor.x >= r.left && cursor.x <= r.right;
+    let inside_y = cursor.y >= r.top && cursor.y <= r.bottom;
+    if inside_x && inside_y {
+        // Inside rect: nearest wall distance.
+        let dl = cursor.x - r.left;
+        let dr = r.right - cursor.x;
+        let dt = cursor.y - r.top;
+        let db = r.bottom - cursor.y;
+        dl.min(dr).min(dt).min(db).max(0)
+    } else {
+        // Outside rect: Chebyshev distance to boundary.
+        let dx = 0.max((r.left - cursor.x).max(cursor.x - r.right));
+        let dy = 0.max((r.top - cursor.y).max(cursor.y - r.bottom));
+        dx.max(dy)
     }
 }

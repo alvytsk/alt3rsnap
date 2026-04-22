@@ -1,8 +1,11 @@
 //! Engine snap module integration tests.
 
 use alt3rsnap::engine::config::SnapEngineConfig;
-use alt3rsnap::engine::geometry::Rect;
-use alt3rsnap::engine::snap::{bake_zones, MonitorInfo, MonitorSnapshot, SnapZoneId};
+use alt3rsnap::engine::geometry::{Point, Rect};
+use alt3rsnap::engine::snap::{
+    bake_zones, evaluate, Decision, MonitorInfo, MonitorSnapshot, SnapContext, SnapSession,
+    SnapZoneId,
+};
 
 fn mon_1080p(bottom_taskbar_height: i32) -> MonitorInfo {
     MonitorInfo {
@@ -56,4 +59,64 @@ fn zone_rects_never_escape_work_area() {
         assert!(z.target_rect.right <= wa.right);
         assert!(z.target_rect.bottom <= wa.bottom);
     }
+}
+
+fn mk_session(mons: MonitorSnapshot, cfg: SnapEngineConfig) -> SnapSession {
+    let zones = alt3rsnap::engine::snap::bake_zones(&cfg, &mons);
+    SnapSession {
+        ctx: SnapContext {
+            monitors: mons,
+            zones,
+            engage_px: cfg.engage_px,
+            disengage_px: cfg.disengage_px,
+            grab: Point { x: 960, y: 540 },
+            restore_guard_active: false,
+        },
+        engaged: None,
+        last_preview_rect: None,
+        suspended: false,
+        restore_guard_cleared: true,
+    }
+}
+
+#[test]
+fn evaluate_engages_on_left_edge_within_24px() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    let d = evaluate(&mut s, Point { x: 23, y: 500 });
+    match d {
+        Decision::Engage(z) => assert_eq!(z.id, SnapZoneId::LeftHalf),
+        other => panic!("expected Engage(LeftHalf), got {:?}", other),
+    }
+    assert!(s.engaged.is_some());
+}
+
+#[test]
+fn evaluate_holds_while_cursor_stays_near_edge() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    let _ = evaluate(&mut s, Point { x: 23, y: 500 });
+    let d = evaluate(&mut s, Point { x: 25, y: 500 });
+    assert_eq!(d, Decision::Hold);
+}
+
+#[test]
+fn evaluate_disengages_only_after_32px_away() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    let _ = evaluate(&mut s, Point { x: 10, y: 500 });
+    // Still inside disengage radius.
+    assert_eq!(evaluate(&mut s, Point { x: 31, y: 500 }), Decision::Hold);
+    // Cross disengage threshold.
+    assert_eq!(
+        evaluate(&mut s, Point { x: 33, y: 500 }),
+        Decision::Disengage
+    );
+    assert!(s.engaged.is_none());
 }
