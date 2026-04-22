@@ -266,3 +266,45 @@ fn cross_monitor_engages_on_secondary_left_edge() {
         other => panic!("expected monitor-2 LeftHalf, got {:?}", other),
     }
 }
+
+#[test]
+fn cursor_at_shared_display_pixel_picks_first_monitor_zone() {
+    // Two monitors side-by-side, sharing the pixel at x=1920.
+    // The inclusive-bounds guard means the cursor is "on" BOTH monitors at x=1920;
+    // best_candidate's strict-< priority tie-break keeps the first-baked zone, so
+    // monitor-0's RightHalf wins. This pins the current behavior — a future change
+    // to half-open bounds semantics (matching MonitorFromPoint) would deliberately
+    // flip this test too.
+    let mons = MonitorSnapshot {
+        monitors: vec![
+            mon_1080p(40),
+            MonitorInfo {
+                bounds: Rect {
+                    left: 1920,
+                    top: 0,
+                    right: 3840,
+                    bottom: 1080,
+                },
+                work_area: Rect {
+                    left: 1920,
+                    top: 0,
+                    right: 3840,
+                    bottom: 1040,
+                },
+                scale: 100,
+            },
+        ],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    let d = evaluate(&mut s, Point { x: 1920, y: 500 });
+    match d {
+        Decision::Engage(z) => {
+            assert_eq!(z.id, SnapZoneId::RightHalf);
+            assert_eq!(z.target_rect.right, 1920);
+        }
+        other => panic!(
+            "expected monitor-0 RightHalf at shared pixel, got {:?}",
+            other
+        ),
+    }
+}
