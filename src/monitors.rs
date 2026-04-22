@@ -65,3 +65,81 @@ pub fn snapshot() -> MonitorSnapshot {
 
     MonitorSnapshot { monitors }
 }
+
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+static CACHE: OnceLock<Mutex<Cached>> = OnceLock::new();
+
+struct Cached {
+    snapshot: MonitorSnapshot,
+    last_refreshed: Instant,
+    /// Set when a broadcast (WM_DISPLAYCHANGE / WM_SETTINGCHANGE) arrives mid-drag.
+    /// Consumed at drag end via `on_drag_ended`.
+    dirty: bool,
+    /// Timestamp of the most recent refresh request; used by `flush_pending` to
+    /// apply the 200 ms debounce.
+    pending_refresh: Option<Instant>,
+}
+
+fn cache() -> &'static Mutex<Cached> {
+    CACHE.get_or_init(|| {
+        let s = snapshot();
+        Mutex::new(Cached {
+            snapshot: s,
+            last_refreshed: Instant::now(),
+            dirty: false,
+            pending_refresh: None,
+        })
+    })
+}
+
+/// Debounce window: after a refresh request, `flush_pending` only fires the refresh
+/// when this much time has elapsed. Subsequent requests within the window reset the
+/// timer (only the last matters).
+const DEBOUNCE: Duration = Duration::from_millis(200);
+
+/// Returns a clone of the currently cached `MonitorSnapshot`. Thread-safe;
+/// initialises the cache on first call.
+pub fn current() -> MonitorSnapshot {
+    cache().lock().unwrap().snapshot.clone()
+}
+
+/// Called from tool_window's broadcast handlers (`WM_DISPLAYCHANGE`,
+/// `WM_SETTINGCHANGE(SPI_SETWORKAREA)`). If a drag is currently active, defer the
+/// refresh to drag end (set `dirty`); otherwise schedule a debounced refresh that
+/// `flush_pending` must complete after the 200 ms window.
+pub fn request_refresh(drag_active: bool) {
+    let mut c = cache().lock().unwrap();
+    if drag_active {
+        c.dirty = true;
+        return;
+    }
+    c.pending_refresh = Some(Instant::now());
+}
+
+/// Called from tool_window's `WM_TIMER` when the 200 ms debounce expires. Only
+/// fires the actual `snapshot()` call if at least `DEBOUNCE` has elapsed since
+/// the last `request_refresh`.
+pub fn flush_pending() {
+    let mut c = cache().lock().unwrap();
+    let Some(t0) = c.pending_refresh else { return };
+    if Instant::now().duration_since(t0) < DEBOUNCE {
+        return;
+    }
+    c.pending_refresh = None;
+    c.dirty = false;
+    c.snapshot = snapshot();
+    c.last_refreshed = Instant::now();
+}
+
+/// Called from the adapter when a drag ends. If a broadcast arrived mid-drag
+/// (setting `dirty`), refresh now to pick up the new layout for the next drag.
+pub fn on_drag_ended() {
+    let mut c = cache().lock().unwrap();
+    if c.dirty {
+        c.dirty = false;
+        c.snapshot = snapshot();
+        c.last_refreshed = Instant::now();
+    }
+}
