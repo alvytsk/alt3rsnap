@@ -8,10 +8,11 @@ use alt3rsnap::engine::state::{Action, DragAbortReason, DragTarget, Event, Windo
 use alt3rsnap::swallow_latch::SwallowLatch;
 use alt3rsnap::win_api_trait::WinApi;
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 static LAST_BALLOON_EPOCH_SECS: AtomicU64 = AtomicU64::new(0);
+static DRAG_STATE: AtomicBool = AtomicBool::new(false);
 
 static SWALLOW_LATCH: std::sync::OnceLock<SwallowLatch> = std::sync::OnceLock::new();
 
@@ -20,10 +21,8 @@ pub fn swallow_latch() -> &'static SwallowLatch {
 }
 
 /// Returns true if a window drag is currently in progress.
-/// Stub in Slice G; Slice H2 Task H2.2 replaces the body with a real
-/// `AtomicBool` set by `apply_actions` on `BeginDrag`/`EndDrag`.
 pub fn drag_active() -> bool {
-    false
+    DRAG_STATE.load(Ordering::Relaxed)
 }
 
 fn maybe_balloon_uipi() {
@@ -62,7 +61,7 @@ pub unsafe fn resolve_target(cursor: Point) -> Option<DragTarget> {
         initial_rect,
         is_maximized,
         exclude,
-        monitor_snapshot: None,
+        monitor_snapshot: Some(crate::monitors::current()),
     })
 }
 
@@ -93,6 +92,7 @@ pub fn apply_actions(actions: &[Action]) -> AdapterOutcome {
     for a in actions {
         match a {
             Action::BeginDrag { .. } => unsafe {
+                DRAG_STATE.store(true, Ordering::Relaxed);
                 win_api::capture_mouse(crate::tool_window::hwnd());
             },
             Action::UpdateDrag { hwnd, new_rect } => unsafe {
@@ -102,6 +102,8 @@ pub fn apply_actions(actions: &[Action]) -> AdapterOutcome {
                 }
             },
             Action::EndDrag { .. } => unsafe {
+                DRAG_STATE.store(false, Ordering::Relaxed);
+                crate::monitors::on_drag_ended();
                 win_api::release_mouse();
             },
             Action::RestoreIfMaximized { hwnd, .. } => unsafe {
