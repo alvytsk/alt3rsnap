@@ -17,11 +17,11 @@ mod fullscreen;
 #[cfg(windows)]
 mod hook;
 #[cfg(windows)]
+mod monitors;
+#[cfg(windows)]
 mod tool_window;
 #[cfg(windows)]
 mod tray;
-#[cfg(windows)]
-mod monitors;
 #[cfg(windows)]
 mod win_api;
 

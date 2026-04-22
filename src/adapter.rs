@@ -18,6 +18,13 @@ pub fn swallow_latch() -> &'static SwallowLatch {
     SWALLOW_LATCH.get_or_init(SwallowLatch::new)
 }
 
+/// Returns true if a window drag is currently in progress.
+/// Stub in Slice G; Slice H2 Task H2.2 replaces the body with a real
+/// `AtomicBool` set by `apply_actions` on `BeginDrag`/`EndDrag`.
+pub fn drag_active() -> bool {
+    false
+}
+
 fn maybe_balloon_uipi() {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
