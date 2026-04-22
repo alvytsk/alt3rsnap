@@ -162,10 +162,12 @@ fn zone_switch_from_left_half_to_top_left_quarter_in_single_evaluation() {
         Decision::Engage(z) => assert_eq!(z.id, SnapZoneId::TopLeftQuarter),
         other => panic!("expected Engage(TopLeftQuarter), got {:?}", other),
     }
+    // Session must agree: the new engagement must be visible on the session too.
+    assert!(matches!(&s.engaged, Some(e) if e.id == SnapZoneId::TopLeftQuarter));
 }
 
 #[test]
-fn disabling_quarters_falls_back_to_halves_at_corner() {
+fn disabling_quarters_falls_back_to_top_maximize_at_corner() {
     let mons = MonitorSnapshot {
         monitors: vec![mon_1080p(40)],
     };
