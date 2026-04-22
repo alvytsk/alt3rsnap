@@ -654,3 +654,54 @@ fn snap_section_full_round_trip() {
     assert!(!cfg.snap.zones.top_maximize);
     assert!(cfg.snap.zones.left_third);
 }
+
+// ── M4: [snap] bridge + RuntimeConfig tests ──────────────────────────────────
+
+#[test]
+fn snap_bridge_clamps_disengage_up_to_engage_when_less() {
+    let toml = r#"
+        [snap]
+        engage_distance_px = 50
+        disengage_distance_px = 10
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert_eq!(rt.engine.snap.engage_px, 50);
+    assert_eq!(rt.engine.snap.disengage_px, 50);
+}
+
+#[test]
+fn snap_bridge_caps_engage_at_256() {
+    let toml = r#"
+        [snap]
+        engage_distance_px = 9999
+        disengage_distance_px = 9999
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert_eq!(rt.engine.snap.engage_px, 256);
+    assert_eq!(rt.engine.snap.disengage_px, 256);
+}
+
+#[test]
+fn snap_bridge_passes_zones_through() {
+    let toml = r#"
+        [snap.zones]
+        bottom_maximize = true
+        left_third = true
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert!(rt.engine.snap.zones.bottom_maximize);
+    assert!(rt.engine.snap.zones.left_third);
+}
+
+#[test]
+fn runtime_config_adapter_preview_opacity() {
+    let toml = r#"[snap]
+        preview_opacity = 128
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert_eq!(rt.adapter.preview_opacity, 128);
+}
