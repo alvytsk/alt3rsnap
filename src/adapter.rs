@@ -2,10 +2,11 @@
 
 use crate::hook::ENGINE;
 use crate::win_api;
-use alt3rsnap::engine::geometry::Point;
+use alt3rsnap::engine::geometry::{Point, Rect};
 use alt3rsnap::engine::rules::{evaluate, RuleAction};
-use alt3rsnap::engine::state::{Action, DragTarget};
+use alt3rsnap::engine::state::{Action, DragTarget, WindowId};
 use alt3rsnap::swallow_latch::SwallowLatch;
+use alt3rsnap::win_api_trait::WinApi;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -125,4 +126,50 @@ pub fn apply_actions(actions: &[Action]) -> bool {
 fn now_ms() -> u64 {
     // GetTickCount64 is monotonic, unaffected by system clock adjustment.
     unsafe { windows::Win32::System::SystemInformation::GetTickCount64() }
+}
+
+// ---- Win32 real WinApi impl ----
+
+/// Concrete `WinApi` implementation that calls the real Win32 wrappers and the
+/// overlay.  Lives here (binary crate) rather than in `win_api_trait` because
+/// `win_api` and `overlay` are declared in `main.rs`'s module tree.
+pub struct Win32WinApi {
+    pub hinstance: windows::Win32::Foundation::HINSTANCE,
+}
+
+impl WinApi for Win32WinApi {
+    #[allow(clippy::result_unit_err)]
+    fn set_window_rect(&mut self, hwnd: WindowId, rect: Rect) -> Result<(), ()> {
+        let h = win_api::id_to_hwnd(hwnd);
+        if unsafe { win_api::set_window_rect(h, rect) } {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+    fn is_zoomed(&mut self, hwnd: WindowId) -> bool {
+        let h = win_api::id_to_hwnd(hwnd);
+        unsafe { win_api::is_zoomed(h) }
+    }
+    fn show_maximize(&mut self, hwnd: WindowId) {
+        let h = win_api::id_to_hwnd(hwnd);
+        unsafe { win_api::maximize(h) };
+    }
+    fn show_restore(&mut self, hwnd: WindowId) {
+        let h = win_api::id_to_hwnd(hwnd);
+        unsafe { win_api::restore(h) };
+    }
+    fn capture_mouse(&mut self, hwnd: WindowId) {
+        let h = win_api::id_to_hwnd(hwnd);
+        unsafe { win_api::capture_mouse(h) };
+    }
+    fn release_mouse(&mut self) {
+        unsafe { win_api::release_mouse() };
+    }
+    fn overlay_show(&mut self, rect: Rect) {
+        crate::overlay::show(self.hinstance, rect);
+    }
+    fn overlay_hide(&mut self) {
+        crate::overlay::hide();
+    }
 }
