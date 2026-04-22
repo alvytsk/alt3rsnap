@@ -54,6 +54,47 @@ impl Engine {
         &self.config
     }
 
+    /// Build a `SnapContext` + `SnapSession` for a move drag starting now, iff snap
+    /// is enabled and the adapter attached a monitor snapshot. Called from LeftDown
+    /// and center-move RightDown paths.
+    fn build_snap_for_move(
+        &self,
+        snapshot: Option<crate::engine::snap::MonitorSnapshot>,
+        grab: crate::engine::geometry::Point,
+        target_was_maximized: bool,
+    ) -> (
+        Option<crate::engine::snap::SnapContext>,
+        Option<crate::engine::snap::SnapSession>,
+    ) {
+        use crate::engine::snap::{bake_zones, SnapContext, SnapSession};
+        let Some(snapshot) = snapshot else {
+            return (None, None);
+        };
+        if !self.config.snap.enabled {
+            return (None, None);
+        }
+        let zones = bake_zones(&self.config.snap, &snapshot);
+        let restore_guard_active = target_was_maximized && self.config.restore_maximized_on_move;
+        let ctx = SnapContext {
+            monitors: snapshot,
+            zones,
+            engage_px: self.config.snap.engage_px,
+            disengage_px: self.config.snap.disengage_px,
+            grab,
+            restore_guard_active,
+        };
+        let session = SnapSession {
+            ctx: ctx.clone(),
+            engaged: None,
+            last_preview_rect: None,
+            suspended: self
+                .mods
+                .contains(crate::engine::modifiers::Modifiers::SPACE),
+            restore_guard_cleared: !restore_guard_active,
+        };
+        (Some(ctx), Some(session))
+    }
+
     /// Process one event; return actions for the adapter to execute.
     pub fn handle(&mut self, event: Event) -> Vec<Action> {
         let mut actions = Vec::with_capacity(4);
@@ -118,12 +159,18 @@ impl Engine {
                         actions.push(Action::RaiseWindow { hwnd: target.hwnd });
                     }
 
+                    let (snap_ctx, snap_session) = self.build_snap_for_move(
+                        target.monitor_snapshot.clone(),
+                        *cursor,
+                        target.is_maximized,
+                    );
+
                     actions.push(Action::BeginDrag {
                         hwnd: target.hwnd,
                         initial_rect: target.initial_rect,
                         grab: *cursor,
                         mode: DragMode::Move,
-                        snap: None,
+                        snap: snap_ctx,
                     });
                     actions.push(Action::SwallowEvent);
 
@@ -133,7 +180,7 @@ impl Engine {
                         grab: *cursor,
                         drag_origin: DragOrigin::PrimaryButton,
                         pending_passthrough: false,
-                        snap_session: None,
+                        snap_session,
                     };
                 }
             }
@@ -220,12 +267,18 @@ impl Engine {
                     if sector == crate::engine::geometry::Sector::Center
                         && self.config.center_mode == CenterMode::Move
                     {
+                        let (snap_ctx, snap_session) = self.build_snap_for_move(
+                            target.monitor_snapshot.clone(),
+                            *cursor,
+                            target.is_maximized,
+                        );
+
                         actions.push(Action::BeginDrag {
                             hwnd: target.hwnd,
                             initial_rect: target.initial_rect,
                             grab: *cursor,
                             mode: DragMode::Move,
-                            snap: None,
+                            snap: snap_ctx,
                         });
                         actions.push(Action::SwallowEvent);
                         self.state = State::Moving {
@@ -234,7 +287,7 @@ impl Engine {
                             grab: *cursor,
                             drag_origin: DragOrigin::CenterMoveMode,
                             pending_passthrough: false,
-                            snap_session: None,
+                            snap_session,
                         };
                         return actions;
                     }

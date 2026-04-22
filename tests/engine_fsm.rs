@@ -55,6 +55,7 @@ fn default_target() -> DragTarget {
         },
         is_maximized: false,
         exclude: false,
+        monitor_snapshot: None,
     }
 }
 
@@ -686,4 +687,64 @@ fn snap_scaffold_types_exist_and_round_trip() {
         monitor_index: 0,
     };
     assert_eq!(z.id, SnapZoneId::LeftHalf);
+}
+
+#[test]
+fn left_down_with_snapshot_attaches_snap_context() {
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    assert!(matches!(e.state(), State::Armed));
+
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let actions = e.handle(Event::LeftDown {
+        cursor: Point { x: 100, y: 100 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 50,
+                top: 50,
+                right: 500,
+                bottom: 400,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    let bd = actions
+        .iter()
+        .find_map(|a| match a {
+            Action::BeginDrag { snap, .. } => Some(snap.clone()),
+            _ => None,
+        })
+        .expect("BeginDrag present");
+    assert!(bd.is_some(), "snap context should be attached");
+    assert!(matches!(
+        e.state(),
+        State::Moving {
+            snap_session: Some(_),
+            ..
+        }
+    ));
 }

@@ -54,6 +54,7 @@ pub unsafe fn resolve_target(cursor: Point) -> Option<DragTarget> {
         initial_rect,
         is_maximized,
         exclude,
+        monitor_snapshot: None,
     })
 }
 

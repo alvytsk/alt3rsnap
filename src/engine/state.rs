@@ -54,6 +54,7 @@ pub struct DragTarget {
     pub initial_rect: Rect,
     pub is_maximized: bool,
     pub exclude: bool, // precomputed by adapter from rule engine
+    pub monitor_snapshot: Option<crate::engine::snap::MonitorSnapshot>,
 }
 
 /// Reason an in-progress drag was aborted by the adapter. Emitted only on hard
