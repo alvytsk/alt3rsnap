@@ -11,7 +11,18 @@ pub mod state;
 use crate::engine::config::{CenterMode, EngineConfig, MiddleClickAction};
 use crate::engine::geometry::ResizeAnchor;
 use crate::engine::modifiers::Modifiers;
-use crate::engine::state::{Action, DragMode, DragOrigin, Event, State};
+use crate::engine::state::{Action, DragMode, DragOrigin, Event, State, WindowId};
+
+/// Reason for leaving `State::Moving`. Internal to the FSM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExitMovingReason {
+    LeftUp,
+    /// Reserved for Task C5 (`Event::DragAborted` handler). Not yet constructed.
+    #[allow(dead_code)]
+    DragAborted,
+    DisabledFromToggle,
+    DisabledFromReload,
+}
 
 pub struct Engine {
     state: State,
@@ -173,18 +184,13 @@ impl Engine {
                 }
             }
             Event::LeftUp => {
-                if let State::Moving {
-                    hwnd,
-                    pending_passthrough,
-                    ..
-                } = &self.state
-                {
-                    let hwnd = *hwnd;
-                    let pp = *pending_passthrough;
-                    actions.push(Action::EndDrag { hwnd });
-                    actions.push(Action::CancelMenuActivation);
-                    self.state = if pp { State::PassThrough } else { State::Idle };
-                    self.reconcile_arm_state(&mut actions);
+                if matches!(self.state, State::Moving { .. }) {
+                    if let Some((_hwnd, pp)) =
+                        self.exit_moving(ExitMovingReason::LeftUp, &mut actions)
+                    {
+                        self.state = if pp { State::PassThrough } else { State::Idle };
+                        self.reconcile_arm_state(&mut actions);
+                    }
                 }
             }
             Event::RightDown { cursor, target } => {
@@ -274,23 +280,31 @@ impl Engine {
                     self.reconcile_arm_state(&mut actions);
                 }
             }
-            Event::ToggleEnable => match std::mem::replace(&mut self.state, State::Idle) {
-                State::Disabled => {
-                    self.state = State::Idle;
-                    self.reconcile_arm_state(&mut actions);
-                    actions.push(Action::UpdateTrayIcon { enabled: true });
-                }
-                State::Moving { hwnd, .. } | State::Resizing { hwnd, .. } => {
-                    actions.push(Action::EndDrag { hwnd });
-                    actions.push(Action::CancelMenuActivation);
+            Event::ToggleEnable => {
+                if matches!(self.state, State::Moving { .. }) {
+                    let _ = self.exit_moving(ExitMovingReason::DisabledFromToggle, &mut actions);
                     self.state = State::Disabled;
                     actions.push(Action::UpdateTrayIcon { enabled: false });
+                } else {
+                    match std::mem::replace(&mut self.state, State::Idle) {
+                        State::Disabled => {
+                            self.state = State::Idle;
+                            self.reconcile_arm_state(&mut actions);
+                            actions.push(Action::UpdateTrayIcon { enabled: true });
+                        }
+                        State::Resizing { hwnd, .. } => {
+                            actions.push(Action::EndDrag { hwnd });
+                            actions.push(Action::CancelMenuActivation);
+                            self.state = State::Disabled;
+                            actions.push(Action::UpdateTrayIcon { enabled: false });
+                        }
+                        _other => {
+                            self.state = State::Disabled;
+                            actions.push(Action::UpdateTrayIcon { enabled: false });
+                        }
+                    }
                 }
-                _other => {
-                    self.state = State::Disabled;
-                    actions.push(Action::UpdateTrayIcon { enabled: false });
-                }
-            },
+            }
             Event::FullscreenFocused => match &mut self.state {
                 State::Idle | State::Armed => {
                     self.state = State::PassThrough;
@@ -331,6 +345,56 @@ impl Engine {
         actions
     }
 
+    /// Central teardown path from `State::Moving`. Emits `HideSnapPreview` iff the
+    /// session had an engagement, then emits reason-specific actions. Returns
+    /// `(hwnd, pending_passthrough)` so the caller can set the next state.
+    /// Does NOT mutate `self.state` — caller is responsible for the next state transition.
+    fn exit_moving(
+        &mut self,
+        reason: ExitMovingReason,
+        actions: &mut Vec<Action>,
+    ) -> Option<(WindowId, bool)> {
+        let (hwnd, had_engaged, pending_passthrough) = match &self.state {
+            State::Moving {
+                hwnd,
+                snap_session,
+                pending_passthrough,
+                ..
+            } => (
+                *hwnd,
+                snap_session.as_ref().and_then(|s| s.engaged.clone()),
+                *pending_passthrough,
+            ),
+            _ => return None,
+        };
+
+        if had_engaged.is_some() {
+            actions.push(Action::HideSnapPreview);
+        }
+
+        match reason {
+            ExitMovingReason::LeftUp => {
+                if let Some(ez) = had_engaged {
+                    actions.push(Action::ApplySnapRect {
+                        hwnd,
+                        rect: ez.target_rect,
+                    });
+                }
+                actions.push(Action::EndDrag { hwnd });
+                actions.push(Action::CancelMenuActivation);
+            }
+            ExitMovingReason::DragAborted => {
+                actions.push(Action::EndDrag { hwnd });
+            }
+            ExitMovingReason::DisabledFromToggle | ExitMovingReason::DisabledFromReload => {
+                actions.push(Action::EndDrag { hwnd });
+                actions.push(Action::CancelMenuActivation);
+            }
+        }
+
+        Some((hwnd, pending_passthrough))
+    }
+
     fn reconcile_arm_state(&mut self, actions: &mut Vec<Action>) {
         let arm_matches = self.config.policy.arm.matches(self.mods);
         self.state = match (std::mem::replace(&mut self.state, State::Idle), arm_matches) {
@@ -355,8 +419,11 @@ impl Engine {
             self.reconcile_arm_state(&mut actions);
             actions.push(Action::UpdateTrayIcon { enabled: true });
         } else if !self.config.enabled && was_enabled {
-            if let State::Moving { hwnd, .. } | State::Resizing { hwnd, .. } = &self.state {
-                actions.push(Action::EndDrag { hwnd: *hwnd });
+            if matches!(self.state, State::Moving { .. }) {
+                let _ = self.exit_moving(ExitMovingReason::DisabledFromReload, &mut actions);
+            } else if let State::Resizing { hwnd, .. } = &self.state {
+                let hwnd = *hwnd;
+                actions.push(Action::EndDrag { hwnd });
                 actions.push(Action::CancelMenuActivation);
             }
             self.state = State::Disabled;
