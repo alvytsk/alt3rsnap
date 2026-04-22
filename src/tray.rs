@@ -84,7 +84,7 @@ pub fn on_tray_message(tool_hwnd: HWND, _wparam: WPARAM, lparam: LPARAM) {
 fn toggle_enabled() {
     ENGINE.with(|e| {
         let actions = e.borrow_mut().handle(EngineEvent::ToggleEnable);
-        crate::adapter::apply_actions(&actions);
+        let _ = crate::adapter::apply_actions(&actions);
     });
     ENABLED.store(
         ENGINE.with(|e| !matches!(e.borrow().state(), State::Disabled)),

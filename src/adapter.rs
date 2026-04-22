@@ -4,7 +4,7 @@ use crate::hook::ENGINE;
 use crate::win_api;
 use alt3rsnap::engine::geometry::{Point, Rect};
 use alt3rsnap::engine::rules::{evaluate, RuleAction};
-use alt3rsnap::engine::state::{Action, DragTarget, WindowId};
+use alt3rsnap::engine::state::{Action, DragAbortReason, DragTarget, Event, WindowId};
 use alt3rsnap::swallow_latch::SwallowLatch;
 use alt3rsnap::win_api_trait::WinApi;
 
@@ -66,7 +66,18 @@ pub unsafe fn resolve_target(cursor: Point) -> Option<DragTarget> {
     })
 }
 
-pub fn apply_actions(actions: &[Action]) -> bool {
+/// Outcome returned by `apply_actions`.
+///
+/// `swallow` is fed back to the Windows low-level hook as the "suppress this
+/// event" flag.  `re_entry` holds any `Event`s that the adapter wants to inject
+/// back into the engine (e.g. `DragAborted` after a hard `ApplySnapRect`
+/// failure); callers must drive those through `Engine::handle` themselves.
+pub struct AdapterOutcome {
+    pub swallow: bool,
+    pub re_entry: Vec<Event>,
+}
+
+pub fn apply_actions(actions: &[Action]) -> AdapterOutcome {
     // Spec §3.5: clear the latch defensively before any BeginDrag in this batch.
     if actions
         .iter()
@@ -75,7 +86,10 @@ pub fn apply_actions(actions: &[Action]) -> bool {
         swallow_latch().on_begin_drag();
     }
 
-    let mut swallow = false;
+    let mut outcome = AdapterOutcome {
+        swallow: false,
+        re_entry: Vec::new(),
+    };
     for a in actions {
         match a {
             Action::BeginDrag { .. } => unsafe {
@@ -100,7 +114,7 @@ pub fn apply_actions(actions: &[Action]) -> bool {
                 win_api::cancel_menu_activation();
             },
             Action::SwallowEvent => {
-                swallow = true;
+                outcome.swallow = true;
             }
             Action::UpdateTrayIcon { enabled } => {
                 crate::tray::set_enabled_flag(*enabled);
@@ -114,13 +128,33 @@ pub fn apply_actions(actions: &[Action]) -> bool {
                 }
                 swallow_latch().set(now_ms());
             },
-            // Slice H2 owns the real behaviour for snap overlay / snap apply.
-            Action::ShowSnapPreview { .. } => {}
-            Action::HideSnapPreview => {}
-            Action::ApplySnapRect { .. } => {}
+            Action::ShowSnapPreview { rect } => {
+                // Lazy-fetch the module handle inline — same pattern as tray.rs.
+                unsafe {
+                    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+                    if let Ok(hmod) = GetModuleHandleW(None) {
+                        let hinstance: windows::Win32::Foundation::HINSTANCE = hmod.into();
+                        crate::overlay::show(hinstance, *rect);
+                    }
+                }
+            }
+            Action::HideSnapPreview => {
+                crate::overlay::hide();
+            }
+            Action::ApplySnapRect { hwnd, rect } => {
+                let h = win_api::id_to_hwnd(*hwnd);
+                if !unsafe { win_api::set_window_rect(h, *rect) } {
+                    // Hard failure (e.g. UIPI denied). Emit DragAborted so the engine
+                    // tears down the snap session cleanly; stop processing this batch.
+                    outcome.re_entry.push(Event::DragAborted {
+                        reason: DragAbortReason::ApplyGeometryFailed,
+                    });
+                    break;
+                }
+            }
         }
     }
-    swallow
+    outcome
 }
 
 fn now_ms() -> u64 {

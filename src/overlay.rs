@@ -98,8 +98,7 @@ fn ensure_created(hinstance: HINSTANCE) -> HWND {
     }
     unsafe {
         let hwnd = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
-                | WS_EX_TOPMOST,
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
             w!("Alt3rSnapOverlay"),
             w!("Alt3rSnap"),
             WS_POPUP,

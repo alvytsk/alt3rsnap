@@ -91,9 +91,12 @@ impl WinApi for RecordingWinApi {
     fn overlay_show(&mut self, rect: Rect) {
         // Idempotent: don't record duplicate shows at the same rect.
         if self.overlay_visible {
-            if let Some(Call::OverlayShow(last)) = self.calls.iter().rev().find(|c| {
-                matches!(c, Call::OverlayShow(_) | Call::OverlayHide)
-            }) {
+            if let Some(Call::OverlayShow(last)) = self
+                .calls
+                .iter()
+                .rev()
+                .find(|c| matches!(c, Call::OverlayShow(_) | Call::OverlayHide))
+            {
                 if *last == rect {
                     return;
                 }

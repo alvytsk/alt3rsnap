@@ -33,7 +33,7 @@ pub fn reload() {
             Ok(runtime) => {
                 crate::hook::ENGINE.with(|e| {
                     let actions = e.borrow_mut().set_config(runtime.engine);
-                    crate::adapter::apply_actions(&actions);
+                    let _ = crate::adapter::apply_actions(&actions);
                 });
                 *crate::adapter_config_handle().lock().unwrap() = runtime.adapter;
             }
