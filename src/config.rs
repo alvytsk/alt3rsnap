@@ -48,6 +48,8 @@ pub struct FileConfig {
     pub resize: Resize,
     #[serde(default)]
     pub exclude: Exclude,
+    #[serde(default)]
+    pub snap: SnapFile,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rules: Vec<RuleFile>,
 }
@@ -105,6 +107,73 @@ impl Default for Resize {
 #[serde(default)]
 pub struct Exclude {
     pub processes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ZoneTogglesFile {
+    pub top_maximize: bool,
+    pub bottom_maximize: bool,
+    pub left_half: bool,
+    pub right_half: bool,
+    pub top_left_quarter: bool,
+    pub top_right_quarter: bool,
+    pub bottom_left_quarter: bool,
+    pub bottom_right_quarter: bool,
+    pub left_third: bool,
+    pub middle_third: bool,
+    pub right_third: bool,
+}
+impl Default for ZoneTogglesFile {
+    fn default() -> Self {
+        Self {
+            top_maximize: true,
+            bottom_maximize: false,
+            left_half: true,
+            right_half: true,
+            top_left_quarter: true,
+            top_right_quarter: true,
+            bottom_left_quarter: true,
+            bottom_right_quarter: true,
+            left_third: false,
+            middle_third: false,
+            right_third: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SnapFile {
+    pub enabled: bool,
+    pub engage_distance_px: u32,
+    pub disengage_distance_px: u32,
+    pub preview_opacity: u8,
+    pub zones: ZoneTogglesFile,
+}
+impl Default for SnapFile {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            engage_distance_px: 24,
+            disengage_distance_px: 32,
+            preview_opacity: 0x99,
+            zones: ZoneTogglesFile::default(),
+        }
+    }
+}
+
+/// Runtime-only adapter configuration (not serialized to TOML).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AdapterConfig {
+    pub preview_opacity: u8,
+}
+impl Default for AdapterConfig {
+    fn default() -> Self {
+        Self {
+            preview_opacity: 0x99,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

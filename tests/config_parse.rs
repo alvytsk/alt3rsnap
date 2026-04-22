@@ -615,3 +615,42 @@ fn bridge_middle_click_action_case_insensitive() {
         MiddleClickAction::ToggleMaximize
     );
 }
+
+// ── M4: [snap] file-layer serde tests ────────────────────────────────────────
+
+#[test]
+fn snap_section_defaults_when_missing() {
+    let toml = r#"
+        [activation]
+        modifier = "alt"
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    assert!(cfg.snap.enabled);
+    assert_eq!(cfg.snap.engage_distance_px, 24);
+    assert_eq!(cfg.snap.disengage_distance_px, 32);
+    assert_eq!(cfg.snap.preview_opacity, 0x99);
+    assert!(cfg.snap.zones.left_half);
+    assert!(!cfg.snap.zones.left_third);
+    assert!(!cfg.snap.zones.bottom_maximize);
+}
+
+#[test]
+fn snap_section_full_round_trip() {
+    let toml = r#"
+        [snap]
+        enabled = true
+        engage_distance_px = 30
+        disengage_distance_px = 40
+        preview_opacity = 200
+
+        [snap.zones]
+        top_maximize = false
+        left_third = true
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    assert_eq!(cfg.snap.engage_distance_px, 30);
+    assert_eq!(cfg.snap.disengage_distance_px, 40);
+    assert_eq!(cfg.snap.preview_opacity, 200);
+    assert!(!cfg.snap.zones.top_maximize);
+    assert!(cfg.snap.zones.left_third);
+}
