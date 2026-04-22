@@ -131,6 +131,24 @@ impl Engine {
                     };
                 }
                 self.reconcile_arm_state(&mut actions);
+
+                if *vk == crate::engine::state::VirtualKey::Space {
+                    if let State::Moving {
+                        snap_session: Some(session),
+                        ..
+                    } = &mut self.state
+                    {
+                        if *down {
+                            if session.engaged.take().is_some() {
+                                actions.push(Action::HideSnapPreview);
+                                session.last_preview_rect = None;
+                            }
+                            session.suspended = true;
+                        } else {
+                            session.suspended = false;
+                        }
+                    }
+                }
             }
             Event::LeftDown { cursor, target } => {
                 if let State::Armed = self.state {

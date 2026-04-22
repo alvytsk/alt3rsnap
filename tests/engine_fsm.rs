@@ -831,3 +831,87 @@ fn left_up_with_engaged_zone_emits_exact_four_action_order() {
         ]
     );
 }
+
+#[test]
+fn space_during_moving_suspends_snap_and_hides_preview() {
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let _ = e.handle(Event::LeftDown {
+        cursor: Point { x: 400, y: 400 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 350,
+                top: 350,
+                right: 850,
+                bottom: 700,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    let _ = e.handle(Event::MouseMove {
+        cursor: Point { x: 5, y: 500 },
+    });
+    // Engagement must be active now.
+    if let State::Moving {
+        snap_session: Some(s),
+        ..
+    } = e.state()
+    {
+        assert!(s.engaged.is_some());
+    } else {
+        panic!("expected Moving with session");
+    }
+
+    // Press Space — should tear down engagement and hide preview.
+    let acts = e.handle(Event::KeyChange {
+        vk: VirtualKey::Space,
+        down: true,
+    });
+    assert!(acts.iter().any(|a| matches!(a, Action::HideSnapPreview)));
+
+    // Next MouseMove while Space held — no ShowSnapPreview (suspended).
+    let acts2 = e.handle(Event::MouseMove {
+        cursor: Point { x: 6, y: 500 },
+    });
+    assert!(!acts2
+        .iter()
+        .any(|a| matches!(a, Action::ShowSnapPreview { .. })));
+
+    // Release Space — subsequent move re-engages.
+    let _ = e.handle(Event::KeyChange {
+        vk: VirtualKey::Space,
+        down: false,
+    });
+    let acts3 = e.handle(Event::MouseMove {
+        cursor: Point { x: 6, y: 500 },
+    });
+    assert!(acts3
+        .iter()
+        .any(|a| matches!(a, Action::ShowSnapPreview { .. })));
+}
