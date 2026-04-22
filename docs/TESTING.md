@@ -94,3 +94,52 @@ Set `[resize].center_mode` in `config.toml`; default is `"symmetric"` (already c
 - [ ] Matcher-less rule (`[[rules]] action = "exclude"` with no `match_*` fields) → dropped silently; no window gets excluded by it.
 - [ ] `[[rules]]` with `action` field missing entirely → config load **fails** with a TOML parse error (`missing field \`action\``) and the previous config stays active (no silent behavioural flip).
 - [ ] Edit `[[rules]]` in the config file, tray → "Reload config" → new rules take effect on the next drag-target resolution without restart.
+
+## Snap (v0.2 M4)
+
+Snap is on by default with the Aero-like zone set. Alt+Left-drag only; resize drags never snap.
+
+### Core zones
+- [ ] Alt+Left-drag toward the left edge shows a ghost preview of the left half; release commits.
+- [ ] Alt+Left-drag toward the right edge shows a ghost preview of the right half; release commits.
+- [ ] Drag to the top edge — top-maximize preview; release maximises.
+- [ ] Drag to each of the four corners — quarter preview; release commits the quarter.
+- [ ] Enabling `zones.left_third = true` + `middle_third`/`right_third` via config exposes thirds on the left half (corners still outrank).
+
+### Hysteresis + priority
+- [ ] Slowly walk the cursor across the engage (24 px) / disengage (32 px) boundary → no flicker.
+- [ ] At the top-left corner, quarter wins over both top-maximize and left-half.
+- [ ] With `top_left_quarter = false`, the top-left region falls back to top-maximize.
+
+### Space suspend
+- [ ] Hold Space during a drag with preview visible → preview disappears immediately.
+- [ ] Release Space → preview re-engages if the cursor is still in a zone.
+- [ ] Space already held at drag start → no preview appears until Space is released.
+
+### Multi-monitor + DPI
+- [ ] Drag a window from monitor 1 onto monitor 2 and snap — zones align to monitor 2's work area.
+- [ ] Mixed-DPI (100% + 200%) layout — snap feels consistent on both monitors.
+- [ ] Display hot-plug during a drag: drag continues on the old snapshot; next drag uses the new layout.
+- [ ] Work-area change during a drag (tray notification opens a docked surface) — drag continues on the old snapshot; next drag reflects the new work_area.
+- [ ] Auto-hide taskbar: zone rects use the reported `work_area`; top-edge intent still fires from `y = 0`.
+
+### Maximized-restore guard
+- [ ] Alt+Left-drag on a maximized window near the top edge restores without immediately engaging the top-maximize zone — user has to move ≥ 16 px from grab point before snap starts evaluating.
+
+### Preview exit paths
+- [ ] Preview hides on normal `LeftUp` (with or without commit).
+- [ ] Preview hides on `FullscreenFocused` resolved at `LeftUp` (drag ends in PassThrough).
+- [ ] Preview hides when tray → "Disable" is clicked mid-drag.
+- [ ] Preview hides when the target window is destroyed mid-drag (hard failure path → `DragAborted`).
+- [ ] Hard geometry failure at commit (e.g., UAC-protected window) surfaces the usual rate-limited balloon and hides the preview without committing snap.
+
+### Config
+- [ ] `snap.enabled = false` → no preview ever appears; drags are plain v0.1 moves.
+- [ ] Edit `[snap].engage_distance_px`, tray "Reload config", change takes effect on the next drag.
+- [ ] Config change mid-drag does **not** alter the in-flight drag's snap behaviour.
+- [ ] `preview_opacity` is applied at next `ShowSnapPreview` (not mid-drag).
+
+### Move-only + middle-click
+- [ ] Alt+Right-drag with `center_mode = "move"` in the center sector IS eligible for snap (routed to Moving).
+- [ ] Alt+Right-drag in any outer sector (resize) is NEVER eligible for snap.
+- [ ] Alt + middle-click (v0.2 M1) is unaffected — snap doesn't interact with it.
