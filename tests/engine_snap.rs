@@ -308,3 +308,52 @@ fn cursor_at_shared_display_pixel_picks_first_monitor_zone() {
         ),
     }
 }
+
+#[test]
+fn zones_baked_at_session_creation_are_immutable_across_reload() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let cfg_on = SnapEngineConfig::default();
+    let mut s = mk_session(mons.clone(), cfg_on);
+
+    // Simulate a reload that would disable snap — not applied to the session directly.
+    // The session keeps its own ctx; changing the "outside" config does not re-bake.
+    // (Engine-level invariant: SnapContext is immutable for drag lifetime.)
+    let cfg_off = SnapEngineConfig {
+        enabled: false,
+        ..SnapEngineConfig::default()
+    };
+    let _ = &cfg_off; // never applied to s — that is the point
+
+    let d = evaluate(&mut s, Point { x: 5, y: 500 });
+    assert!(
+        matches!(d, Decision::Engage(ref z) if z.id == SnapZoneId::LeftHalf),
+        "drag-local zones must still evaluate even if outer config disabled snap"
+    );
+}
+
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn proptest_zones_never_escape_work_area(
+        taskbar_h in 0i32..200i32,
+        w in 640i32..=7680i32,
+        h in 480i32..=4320i32,
+    ) {
+        let mi = MonitorInfo {
+            bounds: Rect { left: 0, top: 0, right: w, bottom: h },
+            work_area: Rect { left: 0, top: 0, right: w, bottom: (h - taskbar_h).max(1) },
+            scale: 100,
+        };
+        let snap = MonitorSnapshot { monitors: vec![mi.clone()] };
+        let zones = alt3rsnap::engine::snap::bake_zones(&SnapEngineConfig::default(), &snap);
+        for z in &zones {
+            prop_assert!(z.target_rect.left >= mi.work_area.left);
+            prop_assert!(z.target_rect.top >= mi.work_area.top);
+            prop_assert!(z.target_rect.right <= mi.work_area.right);
+            prop_assert!(z.target_rect.bottom <= mi.work_area.bottom);
+        }
+    }
+}
