@@ -160,7 +160,7 @@ pub fn default_config_path() -> PathBuf {
     PathBuf::from("config.toml")
 }
 
-use crate::engine::config::EngineConfig;
+use crate::engine::config::{EngineConfig, SnapEngineConfig};
 use crate::engine::modifiers::{ModMatcher, Modifiers};
 use crate::engine::policy::ActivationPolicy;
 use crate::engine::rules::{Pattern, RuleAction, WindowRule, WindowTraitMask};
@@ -218,6 +218,7 @@ impl FileConfig {
             center_fraction: self.resize.center_fraction.clamp(0.0, 1.0),
             center_mode,
             middle_click_action,
+            snap: SnapEngineConfig::default(),
         })
     }
 }
