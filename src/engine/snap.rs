@@ -314,6 +314,12 @@ fn best_candidate(ctx: &SnapContext, cursor: Point, engage_px: i32) -> Option<&S
 fn cursor_eligible(z: &SnapZone, cursor: Point, engage_px: i32, mon: &MonitorInfo) -> bool {
     use SnapZoneId::*;
     let b = mon.bounds;
+    // Cursor must be physically on this monitor (inclusive bounds) — prevents a zone
+    // on monitor A from firing when the cursor has crossed onto monitor B's side of
+    // a shared display boundary.
+    if cursor.x < b.left || cursor.x > b.right || cursor.y < b.top || cursor.y > b.bottom {
+        return false;
+    }
     match z.id {
         TopLeftQuarter => {
             (cursor.x - b.left).abs() <= engage_px && (cursor.y - b.top).abs() <= engage_px
