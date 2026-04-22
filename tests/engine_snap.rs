@@ -120,3 +120,62 @@ fn evaluate_disengages_only_after_32px_away() {
     );
     assert!(s.engaged.is_none());
 }
+
+#[test]
+fn top_left_corner_prefers_quarter_over_half_and_maximize() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    let d = evaluate(&mut s, Point { x: 5, y: 5 });
+    match d {
+        Decision::Engage(z) => assert_eq!(z.id, SnapZoneId::TopLeftQuarter),
+        other => panic!("expected TopLeftQuarter, got {:?}", other),
+    }
+}
+
+#[test]
+fn top_middle_prefers_top_maximize_over_halves() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    let d = evaluate(&mut s, Point { x: 960, y: 5 });
+    match d {
+        Decision::Engage(z) => assert_eq!(z.id, SnapZoneId::TopMaximize),
+        other => panic!("expected TopMaximize, got {:?}", other),
+    }
+}
+
+#[test]
+fn zone_switch_from_left_half_to_top_left_quarter_in_single_evaluation() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut s = mk_session(mons, SnapEngineConfig::default());
+    // First engage LeftHalf mid-screen-left.
+    let d1 = evaluate(&mut s, Point { x: 5, y: 500 });
+    assert!(matches!(d1, Decision::Engage(ref z) if z.id == SnapZoneId::LeftHalf));
+    // Move cursor up toward top-left corner — must switch directly to quarter.
+    let d2 = evaluate(&mut s, Point { x: 5, y: 5 });
+    match d2 {
+        Decision::Engage(z) => assert_eq!(z.id, SnapZoneId::TopLeftQuarter),
+        other => panic!("expected Engage(TopLeftQuarter), got {:?}", other),
+    }
+}
+
+#[test]
+fn disabling_quarters_falls_back_to_halves_at_corner() {
+    let mons = MonitorSnapshot {
+        monitors: vec![mon_1080p(40)],
+    };
+    let mut cfg = SnapEngineConfig::default();
+    cfg.zones.top_left_quarter = false;
+    let mut s = mk_session(mons, cfg);
+    let d = evaluate(&mut s, Point { x: 5, y: 5 });
+    // With top_left_quarter disabled, next priority in the candidate set is TopMaximize (top edge).
+    match d {
+        Decision::Engage(z) => assert_eq!(z.id, SnapZoneId::TopMaximize),
+        other => panic!("expected TopMaximize fallback, got {:?}", other),
+    }
+}
