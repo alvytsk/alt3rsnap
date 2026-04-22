@@ -748,3 +748,86 @@ fn left_down_with_snapshot_attaches_snap_context() {
         }
     ));
 }
+
+#[test]
+fn left_up_with_engaged_zone_emits_exact_four_action_order() {
+    use alt3rsnap::engine::config::EngineConfig;
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let _ = e.handle(Event::LeftDown {
+        cursor: Point { x: 400, y: 400 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 350,
+                top: 350,
+                right: 850,
+                bottom: 700,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    // Drag toward left edge so snap engages.
+    let _ = e.handle(Event::MouseMove {
+        cursor: Point { x: 5, y: 500 },
+    });
+    // Now release.
+    let acts = e.handle(Event::LeftUp);
+
+    // Classify each action by kind so we can assert the exact prefix.
+    let kinds: Vec<&'static str> = acts
+        .iter()
+        .map(|a| match a {
+            Action::HideSnapPreview => "HideSnapPreview",
+            Action::ApplySnapRect { .. } => "ApplySnapRect",
+            Action::EndDrag { .. } => "EndDrag",
+            Action::CancelMenuActivation => "CancelMenuActivation",
+            Action::UpdateTrayIcon { .. } => "UpdateTrayIcon",
+            Action::ShowSnapPreview { .. } => "ShowSnapPreview",
+            Action::BeginDrag { .. } => "BeginDrag",
+            Action::UpdateDrag { .. } => "UpdateDrag",
+            Action::RestoreIfMaximized { .. } => "RestoreIfMaximized",
+            Action::RaiseWindow { .. } => "RaiseWindow",
+            Action::SwallowEvent => "SwallowEvent",
+            Action::ToggleMaximize { .. } => "ToggleMaximize",
+        })
+        .collect();
+
+    // The leading four must be exactly these four in order (UpdateTrayIcon or
+    // re-arming may follow from reconcile_arm_state).
+    assert_eq!(
+        &kinds[..4],
+        &[
+            "HideSnapPreview",
+            "ApplySnapRect",
+            "EndDrag",
+            "CancelMenuActivation",
+        ]
+    );
+}

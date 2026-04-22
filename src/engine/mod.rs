@@ -206,13 +206,30 @@ impl Engine {
                     hwnd,
                     initial_rect,
                     grab,
+                    snap_session,
                     ..
-                } = &self.state
+                } = &mut self.state
                 {
                     let delta = cursor.delta(*grab);
+                    let unsnapped = initial_rect.translate_by(delta);
+
+                    if let Some(session) = snap_session.as_mut() {
+                        use crate::engine::snap::{evaluate, Decision};
+                        match evaluate(session, *cursor) {
+                            Decision::Engage(ez) => actions.push(Action::ShowSnapPreview {
+                                rect: ez.target_rect,
+                            }),
+                            Decision::Hold => {
+                                // No preview action — engine dedupes via last_preview_rect; adapter also idempotent.
+                            }
+                            Decision::Disengage => actions.push(Action::HideSnapPreview),
+                            Decision::None => {}
+                        }
+                    }
+
                     actions.push(Action::UpdateDrag {
                         hwnd: *hwnd,
-                        new_rect: initial_rect.translate_by(delta),
+                        new_rect: unsnapped,
                     });
                 } else if let State::Resizing {
                     hwnd,
