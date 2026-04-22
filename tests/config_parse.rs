@@ -705,3 +705,32 @@ fn runtime_config_adapter_preview_opacity() {
     let rt = cfg.to_runtime_config().unwrap();
     assert_eq!(rt.adapter.preview_opacity, 128);
 }
+
+#[test]
+fn v01_config_without_snap_or_rules_still_loads() {
+    // A representative v0.1 config — no [snap], no [[rules]], no middle_click_action.
+    let toml = r#"
+        [activation]
+        modifier = "alt"
+
+        [behavior]
+        enable_move = true
+        enable_resize = true
+        raise_on_drag = false
+        restore_maximized_on_move = true
+
+        [resize]
+        center_mode = "symmetric"
+        center_fraction = 0.333
+
+        [exclude]
+        processes = []
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert!(
+        rt.engine.snap.enabled,
+        "snap enabled by default on upgrade per spec §7.3"
+    );
+    assert_eq!(rt.adapter.preview_opacity, 0x99);
+}
