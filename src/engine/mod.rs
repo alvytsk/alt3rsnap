@@ -18,6 +18,7 @@ use crate::engine::state::{Action, DragMode, DragOrigin, Event, State, WindowId}
 pub(crate) enum ExitMovingReason {
     LeftUp,
     /// Reserved for Task C5 (`Event::DragAborted` handler). Not yet constructed.
+    // TODO(C5): remove #[allow(dead_code)] once DragAborted is constructed in Event::DragAborted handler.
     #[allow(dead_code)]
     DragAborted,
     DisabledFromToggle,
@@ -259,21 +260,29 @@ impl Engine {
                 }
             }
             Event::RightUp => {
-                let end = match &self.state {
-                    State::Resizing {
-                        hwnd,
-                        pending_passthrough,
-                        ..
-                    } => Some((*hwnd, *pending_passthrough)),
+                // Route Moving (center-move-mode) through exit_moving so a future snap engagement
+                // tears down cleanly. Resizing keeps the inline sequence (no snap applies to resize).
+                if matches!(
+                    self.state,
                     State::Moving {
-                        hwnd,
-                        pending_passthrough,
                         drag_origin: DragOrigin::CenterMoveMode,
                         ..
-                    } => Some((*hwnd, *pending_passthrough)),
-                    _ => None,
-                };
-                if let Some((hwnd, pp)) = end {
+                    }
+                ) {
+                    if let Some((_hwnd, pp)) =
+                        self.exit_moving(ExitMovingReason::LeftUp, &mut actions)
+                    {
+                        self.state = if pp { State::PassThrough } else { State::Idle };
+                        self.reconcile_arm_state(&mut actions);
+                    }
+                } else if let State::Resizing {
+                    hwnd,
+                    pending_passthrough,
+                    ..
+                } = &self.state
+                {
+                    let hwnd = *hwnd;
+                    let pp = *pending_passthrough;
                     actions.push(Action::EndDrag { hwnd });
                     actions.push(Action::CancelMenuActivation);
                     self.state = if pp { State::PassThrough } else { State::Idle };
