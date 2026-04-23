@@ -3,6 +3,8 @@
 
 #![cfg(windows)]
 
+use std::mem::size_of;
+
 use alt3rsnap::engine::geometry::Rect;
 use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
 use windows::Win32::Foundation::{BOOL, LPARAM, RECT};
@@ -25,7 +27,7 @@ pub fn snapshot() -> MonitorSnapshot {
         // SAFETY: lp is a &mut Vec<MonitorInfo> passed by the caller below.
         let out = unsafe { &mut *(lp.0 as *mut Vec<MonitorInfo>) };
         let mut mi = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            cbSize: size_of::<MONITORINFO>() as u32,
             ..Default::default()
         };
         let ok = unsafe { GetMonitorInfoW(hmon, &mut mi) };

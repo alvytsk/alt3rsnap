@@ -2,16 +2,15 @@
 
 #![cfg(target_os = "windows")]
 
+use std::mem::size_of;
+
 use alt3rsnap::engine::geometry::{Point as GPoint, Rect as GRect};
 use alt3rsnap::engine::rules::{WindowInfo, WindowTraits};
 use alt3rsnap::engine::state::WindowId;
 
 use windows::core::PWSTR;
-use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
-use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-};
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
 };
@@ -19,9 +18,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, ReleaseCapture, S
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GetAncestor, GetClassNameW, GetWindowLongPtrW, GetWindowRect,
     GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsZoomed, SetForegroundWindow,
-    SetWindowPos, ShowWindow, WindowFromPoint, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, HWND_TOP,
-    SWP_NOACTIVATE, SWP_NOSENDCHANGING, SWP_NOZORDER, SW_MAXIMIZE, SW_RESTORE, WINDOW_EX_STYLE,
-    WINDOW_STYLE, WS_CAPTION, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_OVERLAPPEDWINDOW,
+    SetWindowPos, ShowWindow, WindowFromPoint, GA_ROOT, GWL_EXSTYLE, HWND_TOP, SWP_NOACTIVATE,
+    SWP_NOSENDCHANGING, SWP_NOZORDER, SW_MAXIMIZE, SW_RESTORE, WINDOW_EX_STYLE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST,
 };
 
 pub fn to_win_point(p: GPoint) -> POINT {
@@ -128,7 +127,7 @@ unsafe fn read_window_traits(hwnd: HWND) -> WindowTraits {
             hwnd,
             DWMWA_CLOAKED,
             &mut v as *mut _ as *mut _,
-            std::mem::size_of::<u32>() as u32,
+            size_of::<u32>() as u32,
         );
         v
     };

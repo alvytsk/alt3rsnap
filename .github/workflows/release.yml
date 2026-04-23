@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Install UPX
+        run: choco install upx -y
+
+      - name: Pack binary with UPX
+        run: upx --best --lzma target/x86_64-pc-windows-msvc/release/alt3rsnap.exe
+
+      - name: Compute SHA-256
+        run: |
+          $hash = (Get-FileHash target/x86_64-pc-windows-msvc/release/alt3rsnap.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  alt3rsnap.exe" | Out-File -Encoding ascii alt3rsnap-sha256.txt
+          Get-Content alt3rsnap-sha256.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/x86_64-pc-windows-msvc/release/alt3rsnap.exe
+            alt3rsnap-sha256.txt

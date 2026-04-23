@@ -56,13 +56,10 @@ impl Engine {
     /// and center-move RightDown paths.
     fn build_snap_for_move(
         &self,
-        snapshot: Option<crate::engine::snap::MonitorSnapshot>,
-        grab: crate::engine::geometry::Point,
+        snapshot: Option<snap::MonitorSnapshot>,
+        grab: geometry::Point,
         target_was_maximized: bool,
-    ) -> (
-        Option<crate::engine::snap::SnapContext>,
-        Option<crate::engine::snap::SnapSession>,
-    ) {
+    ) -> (Option<snap::SnapContext>, Option<snap::SnapSession>) {
         use crate::engine::snap::{bake_zones, SnapContext, SnapSession};
         let Some(snapshot) = snapshot else {
             return (None, None);
@@ -84,9 +81,7 @@ impl Engine {
             ctx: ctx.clone(),
             engaged: None,
             last_preview_rect: None,
-            suspended: self
-                .mods
-                .contains(crate::engine::modifiers::Modifiers::SPACE),
+            suspended: self.mods.contains(Modifiers::SPACE),
             restore_guard_cleared: !restore_guard_active,
         };
         (Some(ctx), Some(session))
@@ -99,7 +94,7 @@ impl Engine {
         if matches!(self.state, State::Disabled | State::PassThrough) {
             // Still update modifier state so we're correct on resume, but ignore otherwise.
             if let Event::KeyChange { vk, down } = &event {
-                let bit = crate::engine::state::vk_bit(*vk);
+                let bit = state::vk_bit(*vk);
                 if !bit.is_empty() {
                     self.mods = if *down {
                         self.mods.with(bit)
@@ -119,7 +114,7 @@ impl Engine {
 
         match &event {
             Event::KeyChange { vk, down } => {
-                let bit = crate::engine::state::vk_bit(*vk);
+                let bit = state::vk_bit(*vk);
                 if !bit.is_empty() {
                     self.mods = if *down {
                         self.mods.with(bit)
@@ -129,7 +124,7 @@ impl Engine {
                 }
                 self.reconcile_arm_state(&mut actions);
 
-                if *vk == crate::engine::state::VirtualKey::Space {
+                if *vk == state::VirtualKey::Space {
                     if let State::Moving {
                         snap_session: Some(session),
                         ..
@@ -255,8 +250,7 @@ impl Engine {
                 } = &self.state
                 {
                     let delta = cursor.delta(*grab);
-                    let new_rect =
-                        crate::engine::geometry::apply_resize(*initial_rect, *anchor, delta);
+                    let new_rect = geometry::apply_resize(*initial_rect, *anchor, delta);
                     actions.push(Action::UpdateDrag {
                         hwnd: *hwnd,
                         new_rect,
@@ -285,7 +279,7 @@ impl Engine {
                         return actions;
                     }
 
-                    let sector = crate::engine::geometry::pick_sector(
+                    let sector = geometry::pick_sector(
                         target.initial_rect,
                         *cursor,
                         self.config.center_fraction,
@@ -296,7 +290,7 @@ impl Engine {
                     }
 
                     // center_mode = Move: center sector routes to Moving instead of Resizing.
-                    if sector == crate::engine::geometry::Sector::Center
+                    if sector == geometry::Sector::Center
                         && self.config.center_mode == CenterMode::Move
                     {
                         let (snap_ctx, snap_session) = self.build_snap_for_move(
@@ -546,7 +540,7 @@ impl Engine {
     }
 }
 
-fn sector_to_anchor(s: crate::engine::geometry::Sector, center_mode: CenterMode) -> ResizeAnchor {
+fn sector_to_anchor(s: geometry::Sector, center_mode: CenterMode) -> ResizeAnchor {
     use crate::engine::geometry::Sector::*;
     match s {
         TopLeft => ResizeAnchor::TopLeft,

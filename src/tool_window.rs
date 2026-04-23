@@ -2,6 +2,7 @@
 
 #![cfg(target_os = "windows")]
 
+use std::mem::size_of;
 use std::sync::OnceLock;
 
 use windows::core::{w, PCWSTR};
@@ -34,7 +35,7 @@ pub fn create() -> windows::core::Result<HWND> {
     unsafe {
         let hinstance: HINSTANCE = GetModuleHandleW(None)?.into();
         let wc = WNDCLASSEXW {
-            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+            cbSize: size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wndproc),
             hInstance: hinstance,
             lpszClassName: TOOL_WND_CLASS,

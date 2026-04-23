@@ -1,6 +1,6 @@
 [package]
 name = "alt3rsnap"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
 description = "Windows utility to move/resize windows with Alt+drag. Rust successor to AltSnap."
 repository = "https://github.com/avymiatnin/alt3rsnap"
@@ -37,11 +37,9 @@ features = [
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_System_Threading",
-    "Win32_System_SystemInformation",
     "Win32_System_LibraryLoader",
-    "Win32_System_Com",
+    "Win32_System_SystemInformation",
     "Win32_Security",
-    "Win32_Storage_FileSystem",
     "Win32_System_Registry",
 ]
 
@@ -57,3 +55,11 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 opt-level = "z"
+
+[lints.rust]
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+unused_lifetimes = "warn"
+
+[lints.clippy]
+all = "warn"

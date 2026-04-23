@@ -2,6 +2,8 @@
 
 #![cfg(target_os = "windows")]
 
+use std::mem::size_of;
+
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::Graphics::Gdi::{
@@ -73,7 +75,7 @@ unsafe fn is_fullscreen_window(hwnd: HWND) -> bool {
         hwnd,
         DWMWA_CLOAKED,
         &mut cloaked as *mut _ as *mut _,
-        std::mem::size_of::<u32>() as u32,
+        size_of::<u32>() as u32,
     );
     if cloaked != 0 {
         return false;
@@ -105,7 +107,7 @@ unsafe fn is_fullscreen_window(hwnd: HWND) -> bool {
     }
     let mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     let mut mi = MONITORINFO {
-        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        cbSize: size_of::<MONITORINFO>() as u32,
         ..Default::default()
     };
     if !GetMonitorInfoW(mon, &mut mi).as_bool() {
