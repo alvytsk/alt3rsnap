@@ -59,10 +59,7 @@ impl Engine {
         snapshot: Option<snap::MonitorSnapshot>,
         grab: geometry::Point,
         target_was_maximized: bool,
-    ) -> (
-        Option<snap::SnapContext>,
-        Option<snap::SnapSession>,
-    ) {
+    ) -> (Option<snap::SnapContext>, Option<snap::SnapSession>) {
         use crate::engine::snap::{bake_zones, SnapContext, SnapSession};
         let Some(snapshot) = snapshot else {
             return (None, None);
@@ -84,9 +81,7 @@ impl Engine {
             ctx: ctx.clone(),
             engaged: None,
             last_preview_rect: None,
-            suspended: self
-                .mods
-                .contains(Modifiers::SPACE),
+            suspended: self.mods.contains(Modifiers::SPACE),
             restore_guard_cleared: !restore_guard_active,
         };
         (Some(ctx), Some(session))
@@ -255,8 +250,7 @@ impl Engine {
                 } = &self.state
                 {
                     let delta = cursor.delta(*grab);
-                    let new_rect =
-                        geometry::apply_resize(*initial_rect, *anchor, delta);
+                    let new_rect = geometry::apply_resize(*initial_rect, *anchor, delta);
                     actions.push(Action::UpdateDrag {
                         hwnd: *hwnd,
                         new_rect,
