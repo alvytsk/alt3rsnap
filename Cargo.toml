@@ -1,6 +1,6 @@
 [package]
 name = "alt3rsnap"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
 description = "Windows utility to move/resize windows with Alt+drag. Rust successor to AltSnap."
 repository = "https://github.com/avymiatnin/alt3rsnap"
