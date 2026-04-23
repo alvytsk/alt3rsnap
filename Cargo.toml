@@ -57,3 +57,11 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 opt-level = "z"
+
+[lints.rust]
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+unused_lifetimes = "warn"
+
+[lints.clippy]
+all = "warn"

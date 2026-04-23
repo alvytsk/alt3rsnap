@@ -62,7 +62,7 @@ fn zone_rects_never_escape_work_area() {
 }
 
 fn mk_session(mons: MonitorSnapshot, cfg: SnapEngineConfig) -> SnapSession {
-    let zones = alt3rsnap::engine::snap::bake_zones(&cfg, &mons);
+    let zones = bake_zones(&cfg, &mons);
     SnapSession {
         ctx: SnapContext {
             monitors: mons,
@@ -348,7 +348,7 @@ proptest! {
             scale: 100,
         };
         let snap = MonitorSnapshot { monitors: vec![mi.clone()] };
-        let zones = alt3rsnap::engine::snap::bake_zones(&SnapEngineConfig::default(), &snap);
+        let zones = bake_zones(&SnapEngineConfig::default(), &snap);
         for z in &zones {
             prop_assert!(z.target_rect.left >= mi.work_area.left);
             prop_assert!(z.target_rect.top >= mi.work_area.top);
