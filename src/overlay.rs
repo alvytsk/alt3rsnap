@@ -6,8 +6,10 @@
 
 #![cfg(target_os = "windows")]
 
-use alt3rsnap::engine::geometry::Rect;
+use std::mem::{size_of, zeroed};
 use std::sync::{Mutex, OnceLock};
+
+use alt3rsnap::engine::geometry::Rect;
 use windows::core::w;
 use windows::Win32::Foundation::{BOOL, COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Dwm::DwmGetColorizationColor;
@@ -47,7 +49,7 @@ pub fn set_opacity(a: u8) {
 pub fn register_class(hinstance: HINSTANCE) {
     unsafe {
         let cls = WNDCLASSEXW {
-            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+            cbSize: size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wndproc),
             hInstance: hinstance,
             lpszClassName: w!("Alt3rSnapOverlay"),
@@ -60,7 +62,7 @@ pub fn register_class(hinstance: HINSTANCE) {
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
         WM_PAINT => {
-            let mut ps: PAINTSTRUCT = std::mem::zeroed();
+            let mut ps: PAINTSTRUCT = zeroed();
             let hdc = BeginPaint(hwnd, &mut ps);
             let fill = CreateSolidBrush(accent_color());
             FillRect(hdc, &ps.rcPaint, fill);

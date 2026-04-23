@@ -2,6 +2,7 @@
 
 #![cfg(target_os = "windows")]
 
+use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use windows::core::{w, PCWSTR};
@@ -42,7 +43,7 @@ pub fn install(tool_hwnd: HWND) {
             .or_else(|_| LoadIconW(None, IDI_APPLICATION))
             .unwrap_or_default();
         let mut nid = NOTIFYICONDATAW {
-            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+            cbSize: size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: tool_hwnd,
             uID: 1,
             uFlags: NIF_ICON | NIF_MESSAGE | NIF_TIP,
@@ -61,7 +62,7 @@ pub fn install(tool_hwnd: HWND) {
 pub fn uninstall(tool_hwnd: HWND) {
     unsafe {
         let nid = NOTIFYICONDATAW {
-            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+            cbSize: size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: tool_hwnd,
             uID: 1,
             ..Default::default()
@@ -100,7 +101,7 @@ pub fn show_balloon(title: &str, text: &str) {
     unsafe {
         let hwnd = crate::tool_window::hwnd();
         let mut nid = NOTIFYICONDATAW {
-            cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+            cbSize: size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: hwnd,
             uID: 1,
             uFlags: NIF_INFO,
@@ -236,7 +237,7 @@ fn show_about() {
         let wtext: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
         windows::Win32::UI::WindowsAndMessaging::MessageBoxW(
             None,
-            windows::core::PCWSTR(wtext.as_ptr()),
+            PCWSTR(wtext.as_ptr()),
             w!("About Alt3rSnap"),
             windows::Win32::UI::WindowsAndMessaging::MB_OK,
         );

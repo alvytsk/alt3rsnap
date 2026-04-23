@@ -12,8 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `[lints]` table in `Cargo.toml` for manifest-level lint control
 - `.github/workflows/release.yml`: tag-triggered release builds UPX-packed `.exe` + SHA-256
 
+### Changed
+- Drop unnecessary path qualifications and clean up unused imports in Windows adapter modules (surfaced by the new `unused_qualifications` lint)
+
 ### Removed
-- Unused `windows` crate features: `Win32_System_Com`, `Win32_Storage_FileSystem`, `Win32_System_SystemInformation`
+- Unused `windows` crate features: `Win32_System_Com`, `Win32_Storage_FileSystem`
 
 ## [0.2.0] — 2026-04-23
 ### Added
