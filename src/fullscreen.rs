@@ -62,7 +62,7 @@ unsafe extern "system" fn win_event_proc(
     };
     let _ = ENGINE.with(|e| {
         let actions = e.borrow_mut().handle(ev);
-        crate::adapter::apply_actions(&actions)
+        let _ = crate::adapter::apply_actions(&actions);
     });
 }
 

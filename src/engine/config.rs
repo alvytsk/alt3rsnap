@@ -10,6 +10,58 @@ pub enum MiddleClickAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ZoneToggles {
+    pub top_maximize: bool,
+    pub bottom_maximize: bool,
+    pub left_half: bool,
+    pub right_half: bool,
+    pub top_left_quarter: bool,
+    pub top_right_quarter: bool,
+    pub bottom_left_quarter: bool,
+    pub bottom_right_quarter: bool,
+    pub left_third: bool,
+    pub middle_third: bool,
+    pub right_third: bool,
+}
+
+impl Default for ZoneToggles {
+    fn default() -> Self {
+        Self {
+            top_maximize: true,
+            bottom_maximize: false,
+            left_half: true,
+            right_half: true,
+            top_left_quarter: true,
+            top_right_quarter: true,
+            bottom_left_quarter: true,
+            bottom_right_quarter: true,
+            left_third: false,
+            middle_third: false,
+            right_third: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnapEngineConfig {
+    pub enabled: bool,
+    pub engage_px: u32,
+    pub disengage_px: u32,
+    pub zones: ZoneToggles,
+}
+
+impl Default for SnapEngineConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            engage_px: 24,
+            disengage_px: 32,
+            zones: ZoneToggles::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CenterMode {
     Symmetric,
     BottomRight,
@@ -28,6 +80,7 @@ pub struct EngineConfig {
     pub center_fraction: f32,
     pub center_mode: CenterMode,
     pub middle_click_action: MiddleClickAction,
+    pub snap: SnapEngineConfig,
 }
 
 impl Default for EngineConfig {
@@ -43,6 +96,7 @@ impl Default for EngineConfig {
             center_fraction: 1.0 / 3.0,
             center_mode: CenterMode::Symmetric,
             middle_click_action: MiddleClickAction::None,
+            snap: SnapEngineConfig::default(),
         }
     }
 }

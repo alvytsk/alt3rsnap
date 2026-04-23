@@ -48,6 +48,8 @@ pub struct FileConfig {
     pub resize: Resize,
     #[serde(default)]
     pub exclude: Exclude,
+    #[serde(default)]
+    pub snap: SnapFile,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rules: Vec<RuleFile>,
 }
@@ -107,6 +109,80 @@ pub struct Exclude {
     pub processes: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ZoneTogglesFile {
+    pub top_maximize: bool,
+    pub bottom_maximize: bool,
+    pub left_half: bool,
+    pub right_half: bool,
+    pub top_left_quarter: bool,
+    pub top_right_quarter: bool,
+    pub bottom_left_quarter: bool,
+    pub bottom_right_quarter: bool,
+    pub left_third: bool,
+    pub middle_third: bool,
+    pub right_third: bool,
+}
+impl Default for ZoneTogglesFile {
+    fn default() -> Self {
+        Self {
+            top_maximize: true,
+            bottom_maximize: false,
+            left_half: true,
+            right_half: true,
+            top_left_quarter: true,
+            top_right_quarter: true,
+            bottom_left_quarter: true,
+            bottom_right_quarter: true,
+            left_third: false,
+            middle_third: false,
+            right_third: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SnapFile {
+    pub enabled: bool,
+    pub engage_distance_px: u32,
+    pub disengage_distance_px: u32,
+    pub preview_opacity: u8,
+    pub zones: ZoneTogglesFile,
+}
+impl Default for SnapFile {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            engage_distance_px: 24,
+            disengage_distance_px: 32,
+            preview_opacity: 0x99,
+            zones: ZoneTogglesFile::default(),
+        }
+    }
+}
+
+/// Runtime-only adapter configuration (not serialized to TOML).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AdapterConfig {
+    pub preview_opacity: u8,
+}
+impl Default for AdapterConfig {
+    fn default() -> Self {
+        Self {
+            preview_opacity: 0x99,
+        }
+    }
+}
+
+/// Combined runtime configuration: engine-visible half + adapter-visible half.
+#[derive(Debug, Clone)]
+pub struct RuntimeConfig {
+    pub engine: EngineConfig,
+    pub adapter: AdapterConfig,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("io error: {0}")]
@@ -160,13 +236,22 @@ pub fn default_config_path() -> PathBuf {
     PathBuf::from("config.toml")
 }
 
-use crate::engine::config::EngineConfig;
+use crate::engine::config::{EngineConfig, SnapEngineConfig, ZoneToggles};
 use crate::engine::modifiers::{ModMatcher, Modifiers};
 use crate::engine::policy::ActivationPolicy;
 use crate::engine::rules::{Pattern, RuleAction, WindowRule, WindowTraitMask};
 use regex::RegexBuilder;
 
 impl FileConfig {
+    pub fn to_runtime_config(&self) -> Result<RuntimeConfig, ConfigError> {
+        let mut engine = self.to_engine_config()?;
+        engine.snap = build_snap_engine_config(&self.snap);
+        let adapter = AdapterConfig {
+            preview_opacity: self.snap.preview_opacity,
+        };
+        Ok(RuntimeConfig { engine, adapter })
+    }
+
     pub fn to_engine_config(&self) -> Result<EngineConfig, ConfigError> {
         let arm_mods = parse_modifier_string(&self.activation.modifier)
             .ok_or_else(|| toml_err(format!("unknown modifier: {}", self.activation.modifier)))?;
@@ -218,7 +303,46 @@ impl FileConfig {
             center_fraction: self.resize.center_fraction.clamp(0.0, 1.0),
             center_mode,
             middle_click_action,
+            snap: SnapEngineConfig::default(),
         })
+    }
+}
+
+fn build_snap_engine_config(f: &SnapFile) -> SnapEngineConfig {
+    let engage = f.engage_distance_px.min(256);
+    let disengage = f.disengage_distance_px.min(256).max(engage);
+    if disengage != f.disengage_distance_px {
+        tracing::warn!(
+            engage = engage,
+            disengage_in = f.disengage_distance_px,
+            disengage_out = disengage,
+            "snap.disengage_distance_px < engage_distance_px — clamping up",
+        );
+    }
+    if engage != f.engage_distance_px {
+        tracing::warn!(
+            engage_in = f.engage_distance_px,
+            engage_out = engage,
+            "snap.engage_distance_px > 256 — clamping down",
+        );
+    }
+    SnapEngineConfig {
+        enabled: f.enabled,
+        engage_px: engage,
+        disengage_px: disengage,
+        zones: ZoneToggles {
+            top_maximize: f.zones.top_maximize,
+            bottom_maximize: f.zones.bottom_maximize,
+            left_half: f.zones.left_half,
+            right_half: f.zones.right_half,
+            top_left_quarter: f.zones.top_left_quarter,
+            top_right_quarter: f.zones.top_right_quarter,
+            bottom_left_quarter: f.zones.bottom_left_quarter,
+            bottom_right_quarter: f.zones.bottom_right_quarter,
+            left_third: f.zones.left_third,
+            middle_third: f.zones.middle_third,
+            right_third: f.zones.right_third,
+        },
     }
 }
 

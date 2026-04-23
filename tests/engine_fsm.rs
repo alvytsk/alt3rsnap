@@ -55,6 +55,7 @@ fn default_target() -> DragTarget {
         },
         is_maximized: false,
         exclude: false,
+        monitor_snapshot: None,
     }
 }
 
@@ -436,7 +437,7 @@ fn armed_plus_middle_down_with_no_target_is_noop() {
 }
 
 use alt3rsnap::engine::config::CenterMode;
-use alt3rsnap::engine::state::DragOrigin;
+use alt3rsnap::engine::state::{DragAbortReason, DragOrigin};
 
 #[test]
 fn engine_config_default_center_mode_is_symmetric() {
@@ -579,4 +580,496 @@ fn right_down_non_center_with_move_mode_still_resizes() {
         }
     )));
     assert!(matches!(e.state(), State::Resizing { .. }));
+}
+
+#[test]
+fn drag_aborted_event_constructs_with_reason() {
+    let e = Event::DragAborted {
+        reason: DragAbortReason::ApplyGeometryFailed,
+    };
+    if let Event::DragAborted { reason } = e {
+        assert_eq!(reason, DragAbortReason::ApplyGeometryFailed);
+    } else {
+        panic!("expected DragAborted");
+    }
+}
+
+#[test]
+fn snap_actions_construct_and_carry_payloads() {
+    let r = Rect {
+        left: 0,
+        top: 0,
+        right: 960,
+        bottom: 540,
+    };
+    let s = Action::ShowSnapPreview { rect: r };
+    let h = Action::HideSnapPreview;
+    let a = Action::ApplySnapRect {
+        hwnd: WindowId(7),
+        rect: r,
+    };
+    assert!(matches!(s, Action::ShowSnapPreview { rect } if rect == r));
+    assert!(matches!(h, Action::HideSnapPreview));
+    assert!(matches!(a, Action::ApplySnapRect { hwnd: WindowId(7), rect } if rect == r));
+}
+
+#[test]
+fn begin_drag_carries_optional_snap_context() {
+    use alt3rsnap::engine::snap::SnapContext;
+    let r = Rect {
+        left: 0,
+        top: 0,
+        right: 800,
+        bottom: 600,
+    };
+    let a = Action::BeginDrag {
+        hwnd: WindowId(1),
+        initial_rect: r,
+        grab: Point { x: 10, y: 10 },
+        mode: DragMode::Move,
+        snap: None as Option<SnapContext>,
+    };
+    assert!(matches!(a, Action::BeginDrag { snap: None, .. }));
+}
+
+#[test]
+fn moving_state_carries_optional_snap_session() {
+    use alt3rsnap::engine::snap::SnapSession;
+    let s = State::Moving {
+        hwnd: WindowId(1),
+        initial_rect: Rect {
+            left: 0,
+            top: 0,
+            right: 1,
+            bottom: 1,
+        },
+        grab: Point { x: 0, y: 0 },
+        drag_origin: DragOrigin::PrimaryButton,
+        pending_passthrough: false,
+        snap_session: None as Option<SnapSession>,
+    };
+    assert!(matches!(
+        s,
+        State::Moving {
+            snap_session: None,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn snap_scaffold_types_exist_and_round_trip() {
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot, SnapZone, SnapZoneId};
+    let mi = MonitorInfo {
+        bounds: Rect {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+        },
+        work_area: Rect {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1040,
+        },
+        scale: 100,
+    };
+    let snap = MonitorSnapshot {
+        monitors: vec![mi.clone()],
+    };
+    assert_eq!(snap.monitors.len(), 1);
+    assert_eq!(snap.monitors[0].work_area.bottom, 1040);
+
+    let z = SnapZone {
+        id: SnapZoneId::LeftHalf,
+        target_rect: mi.work_area,
+        monitor_index: 0,
+    };
+    assert_eq!(z.id, SnapZoneId::LeftHalf);
+}
+
+#[test]
+fn left_down_with_snapshot_attaches_snap_context() {
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    assert!(matches!(e.state(), State::Armed));
+
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let actions = e.handle(Event::LeftDown {
+        cursor: Point { x: 100, y: 100 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 50,
+                top: 50,
+                right: 500,
+                bottom: 400,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    let bd = actions
+        .iter()
+        .find_map(|a| match a {
+            Action::BeginDrag { snap, .. } => Some(snap.clone()),
+            _ => None,
+        })
+        .expect("BeginDrag present");
+    assert!(bd.is_some(), "snap context should be attached");
+    assert!(matches!(
+        e.state(),
+        State::Moving {
+            snap_session: Some(_),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn left_up_with_engaged_zone_emits_exact_four_action_order() {
+    use alt3rsnap::engine::config::EngineConfig;
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let _ = e.handle(Event::LeftDown {
+        cursor: Point { x: 400, y: 400 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 350,
+                top: 350,
+                right: 850,
+                bottom: 700,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    // Drag toward left edge so snap engages.
+    let _ = e.handle(Event::MouseMove {
+        cursor: Point { x: 5, y: 500 },
+    });
+    // Now release.
+    let acts = e.handle(Event::LeftUp);
+
+    // Classify each action by kind so we can assert the exact prefix.
+    let kinds: Vec<&'static str> = acts
+        .iter()
+        .map(|a| match a {
+            Action::HideSnapPreview => "HideSnapPreview",
+            Action::ApplySnapRect { .. } => "ApplySnapRect",
+            Action::EndDrag { .. } => "EndDrag",
+            Action::CancelMenuActivation => "CancelMenuActivation",
+            Action::UpdateTrayIcon { .. } => "UpdateTrayIcon",
+            Action::ShowSnapPreview { .. } => "ShowSnapPreview",
+            Action::BeginDrag { .. } => "BeginDrag",
+            Action::UpdateDrag { .. } => "UpdateDrag",
+            Action::RestoreIfMaximized { .. } => "RestoreIfMaximized",
+            Action::RaiseWindow { .. } => "RaiseWindow",
+            Action::SwallowEvent => "SwallowEvent",
+            Action::ToggleMaximize { .. } => "ToggleMaximize",
+        })
+        .collect();
+
+    // The leading four must be exactly these four in order (UpdateTrayIcon or
+    // re-arming may follow from reconcile_arm_state).
+    assert_eq!(
+        &kinds[..4],
+        &[
+            "HideSnapPreview",
+            "ApplySnapRect",
+            "EndDrag",
+            "CancelMenuActivation",
+        ]
+    );
+}
+
+#[test]
+fn space_during_moving_suspends_snap_and_hides_preview() {
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let _ = e.handle(Event::LeftDown {
+        cursor: Point { x: 400, y: 400 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 350,
+                top: 350,
+                right: 850,
+                bottom: 700,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    let _ = e.handle(Event::MouseMove {
+        cursor: Point { x: 5, y: 500 },
+    });
+    // Engagement must be active now.
+    if let State::Moving {
+        snap_session: Some(s),
+        ..
+    } = e.state()
+    {
+        assert!(s.engaged.is_some());
+    } else {
+        panic!("expected Moving with session");
+    }
+
+    // Press Space — should tear down engagement and hide preview.
+    let acts = e.handle(Event::KeyChange {
+        vk: VirtualKey::Space,
+        down: true,
+    });
+    assert!(acts.iter().any(|a| matches!(a, Action::HideSnapPreview)));
+
+    // Next MouseMove while Space held — no ShowSnapPreview (suspended).
+    let acts2 = e.handle(Event::MouseMove {
+        cursor: Point { x: 6, y: 500 },
+    });
+    assert!(!acts2
+        .iter()
+        .any(|a| matches!(a, Action::ShowSnapPreview { .. })));
+
+    // Release Space — subsequent move re-engages.
+    let _ = e.handle(Event::KeyChange {
+        vk: VirtualKey::Space,
+        down: false,
+    });
+    let acts3 = e.handle(Event::MouseMove {
+        cursor: Point { x: 6, y: 500 },
+    });
+    assert!(acts3
+        .iter()
+        .any(|a| matches!(a, Action::ShowSnapPreview { .. })));
+}
+
+#[test]
+fn drag_aborted_with_engaged_emits_hide_then_enddrag_no_applysnap() {
+    use alt3rsnap::engine::config::EngineConfig;
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let _ = e.handle(Event::LeftDown {
+        cursor: Point { x: 400, y: 400 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 350,
+                top: 350,
+                right: 850,
+                bottom: 700,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    let _ = e.handle(Event::MouseMove {
+        cursor: Point { x: 5, y: 500 },
+    });
+    let acts = e.handle(Event::DragAborted {
+        reason: DragAbortReason::ApplyGeometryFailed,
+    });
+
+    let kinds: Vec<&'static str> = acts
+        .iter()
+        .map(|a| match a {
+            Action::HideSnapPreview => "HideSnapPreview",
+            Action::ApplySnapRect { .. } => "ApplySnapRect",
+            Action::EndDrag { .. } => "EndDrag",
+            _ => "other",
+        })
+        .collect();
+    assert!(kinds.contains(&"HideSnapPreview"));
+    assert!(kinds.contains(&"EndDrag"));
+    assert!(
+        !kinds.contains(&"ApplySnapRect"),
+        "DragAborted must not commit snap"
+    );
+    // And state must have exited Moving.
+    assert!(!matches!(e.state(), State::Moving { .. }));
+}
+
+#[test]
+fn fullscreen_focused_during_moving_preserves_engaged_until_leftup() {
+    use alt3rsnap::engine::config::EngineConfig;
+    use alt3rsnap::engine::snap::{MonitorInfo, MonitorSnapshot};
+    let cfg = EngineConfig::default();
+    let mut e = Engine::new(cfg);
+    e.handle(Event::KeyChange {
+        vk: VirtualKey::Alt,
+        down: true,
+    });
+    let snap = MonitorSnapshot {
+        monitors: vec![MonitorInfo {
+            bounds: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            },
+            work_area: Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            scale: 100,
+        }],
+    };
+    let _ = e.handle(Event::LeftDown {
+        cursor: Point { x: 400, y: 400 },
+        target: Some(DragTarget {
+            hwnd: WindowId(9),
+            initial_rect: Rect {
+                left: 350,
+                top: 350,
+                right: 850,
+                bottom: 700,
+            },
+            is_maximized: false,
+            exclude: false,
+            monitor_snapshot: Some(snap),
+        }),
+    });
+    let _ = e.handle(Event::MouseMove {
+        cursor: Point { x: 5, y: 500 },
+    });
+    // FullscreenFocused arrives mid-drag — must NOT exit Moving, just set pending_passthrough.
+    let _ = e.handle(Event::FullscreenFocused);
+    // Still Moving with engagement intact.
+    assert!(matches!(
+        e.state(),
+        State::Moving {
+            snap_session: Some(_),
+            ..
+        }
+    ));
+    if let State::Moving {
+        snap_session: Some(s),
+        pending_passthrough,
+        ..
+    } = e.state()
+    {
+        assert!(
+            s.engaged.is_some(),
+            "engagement must persist through FullscreenFocused"
+        );
+        assert!(
+            *pending_passthrough,
+            "FullscreenFocused must set pending_passthrough"
+        );
+    }
+
+    // LeftUp now commits via the pending_passthrough path — state transitions to PassThrough,
+    // but exit_moving still emits the engaged-teardown sequence.
+    let acts = e.handle(Event::LeftUp);
+    assert!(matches!(e.state(), State::PassThrough));
+    let kinds: Vec<&'static str> = acts
+        .iter()
+        .map(|a| match a {
+            Action::HideSnapPreview => "HideSnapPreview",
+            Action::ApplySnapRect { .. } => "ApplySnapRect",
+            Action::EndDrag { .. } => "EndDrag",
+            _ => "other",
+        })
+        .collect();
+    assert_eq!(
+        &kinds[..3],
+        &["HideSnapPreview", "ApplySnapRect", "EndDrag"]
+    );
 }

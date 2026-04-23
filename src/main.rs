@@ -17,11 +17,26 @@ mod fullscreen;
 #[cfg(windows)]
 mod hook;
 #[cfg(windows)]
+mod monitors;
+#[cfg(windows)]
+mod overlay;
+#[cfg(windows)]
 mod tool_window;
 #[cfg(windows)]
 mod tray;
 #[cfg(windows)]
 mod win_api;
+
+#[cfg(windows)]
+use std::sync::{Mutex, OnceLock};
+
+#[cfg(windows)]
+static ADAPTER_CONFIG: OnceLock<Mutex<alt3rsnap::config::AdapterConfig>> = OnceLock::new();
+
+#[cfg(windows)]
+pub fn adapter_config_handle() -> &'static Mutex<alt3rsnap::config::AdapterConfig> {
+    ADAPTER_CONFIG.get_or_init(|| Mutex::new(alt3rsnap::config::AdapterConfig::default()))
+}
 
 #[cfg(windows)]
 fn main() {
@@ -34,11 +49,12 @@ fn main() {
     // Load config and configure the engine first.
     let path = alt3rsnap::config::default_config_path();
     match alt3rsnap::config::load_from_path(&path) {
-        Ok(file) => match file.to_engine_config() {
-            Ok(engine_cfg) => {
+        Ok(file) => match file.to_runtime_config() {
+            Ok(runtime) => {
                 hook::ENGINE.with(|e| {
-                    let _ = e.borrow_mut().set_config(engine_cfg);
+                    let _ = e.borrow_mut().set_config(runtime.engine);
                 });
+                *adapter_config_handle().lock().unwrap() = runtime.adapter;
             }
             Err(e) => tracing::error!("config conversion failed, using defaults: {e}"),
         },
@@ -52,6 +68,17 @@ fn main() {
             std::process::exit(1);
         }
     };
+
+    // Register the snap-preview overlay class and set initial opacity from config.
+    unsafe {
+        use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+        if let Ok(hmod) = GetModuleHandleW(None) {
+            let hinstance: windows::Win32::Foundation::HINSTANCE = hmod.into();
+            overlay::register_class(hinstance);
+            let opacity = adapter_config_handle().lock().unwrap().preview_opacity;
+            overlay::set_opacity(opacity);
+        }
+    }
 
     hook::install().expect("hook install");
     fullscreen::install();

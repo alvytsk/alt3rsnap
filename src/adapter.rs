@@ -2,20 +2,27 @@
 
 use crate::hook::ENGINE;
 use crate::win_api;
-use alt3rsnap::engine::geometry::Point;
+use alt3rsnap::engine::geometry::{Point, Rect};
 use alt3rsnap::engine::rules::{evaluate, RuleAction};
-use alt3rsnap::engine::state::{Action, DragTarget};
+use alt3rsnap::engine::state::{Action, DragAbortReason, DragTarget, Event, WindowId};
 use alt3rsnap::swallow_latch::SwallowLatch;
+use alt3rsnap::win_api_trait::WinApi;
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 static LAST_BALLOON_EPOCH_SECS: AtomicU64 = AtomicU64::new(0);
+static DRAG_STATE: AtomicBool = AtomicBool::new(false);
 
 static SWALLOW_LATCH: std::sync::OnceLock<SwallowLatch> = std::sync::OnceLock::new();
 
 pub fn swallow_latch() -> &'static SwallowLatch {
     SWALLOW_LATCH.get_or_init(SwallowLatch::new)
+}
+
+/// Returns true if a window drag is currently in progress.
+pub fn drag_active() -> bool {
+    DRAG_STATE.load(Ordering::Relaxed)
 }
 
 fn maybe_balloon_uipi() {
@@ -54,10 +61,22 @@ pub unsafe fn resolve_target(cursor: Point) -> Option<DragTarget> {
         initial_rect,
         is_maximized,
         exclude,
+        monitor_snapshot: Some(crate::monitors::current()),
     })
 }
 
-pub fn apply_actions(actions: &[Action]) -> bool {
+/// Outcome returned by `apply_actions`.
+///
+/// `swallow` is fed back to the Windows low-level hook as the "suppress this
+/// event" flag.  `re_entry` holds any `Event`s that the adapter wants to inject
+/// back into the engine (e.g. `DragAborted` after a hard `ApplySnapRect`
+/// failure); callers must drive those through `Engine::handle` themselves.
+pub struct AdapterOutcome {
+    pub swallow: bool,
+    pub re_entry: Vec<Event>,
+}
+
+pub fn apply_actions(actions: &[Action]) -> AdapterOutcome {
     // Spec §3.5: clear the latch defensively before any BeginDrag in this batch.
     if actions
         .iter()
@@ -66,10 +85,14 @@ pub fn apply_actions(actions: &[Action]) -> bool {
         swallow_latch().on_begin_drag();
     }
 
-    let mut swallow = false;
+    let mut outcome = AdapterOutcome {
+        swallow: false,
+        re_entry: Vec::new(),
+    };
     for a in actions {
         match a {
             Action::BeginDrag { .. } => unsafe {
+                DRAG_STATE.store(true, Ordering::Relaxed);
                 win_api::capture_mouse(crate::tool_window::hwnd());
             },
             Action::UpdateDrag { hwnd, new_rect } => unsafe {
@@ -79,6 +102,8 @@ pub fn apply_actions(actions: &[Action]) -> bool {
                 }
             },
             Action::EndDrag { .. } => unsafe {
+                DRAG_STATE.store(false, Ordering::Relaxed);
+                crate::monitors::on_drag_ended();
                 win_api::release_mouse();
             },
             Action::RestoreIfMaximized { hwnd, .. } => unsafe {
@@ -91,7 +116,7 @@ pub fn apply_actions(actions: &[Action]) -> bool {
                 win_api::cancel_menu_activation();
             },
             Action::SwallowEvent => {
-                swallow = true;
+                outcome.swallow = true;
             }
             Action::UpdateTrayIcon { enabled } => {
                 crate::tray::set_enabled_flag(*enabled);
@@ -105,12 +130,82 @@ pub fn apply_actions(actions: &[Action]) -> bool {
                 }
                 swallow_latch().set(now_ms());
             },
+            Action::ShowSnapPreview { rect } => {
+                // Lazy-fetch the module handle inline — same pattern as tray.rs.
+                unsafe {
+                    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+                    if let Ok(hmod) = GetModuleHandleW(None) {
+                        let hinstance: windows::Win32::Foundation::HINSTANCE = hmod.into();
+                        crate::overlay::show(hinstance, *rect);
+                    }
+                }
+            }
+            Action::HideSnapPreview => {
+                crate::overlay::hide();
+            }
+            Action::ApplySnapRect { hwnd, rect } => {
+                let h = win_api::id_to_hwnd(*hwnd);
+                if !unsafe { win_api::set_window_rect(h, *rect) } {
+                    // Hard failure (e.g. UIPI denied). Emit DragAborted so the engine
+                    // tears down the snap session cleanly; stop processing this batch.
+                    outcome.re_entry.push(Event::DragAborted {
+                        reason: DragAbortReason::ApplyGeometryFailed,
+                    });
+                    break;
+                }
+            }
         }
     }
-    swallow
+    outcome
 }
 
 fn now_ms() -> u64 {
     // GetTickCount64 is monotonic, unaffected by system clock adjustment.
     unsafe { windows::Win32::System::SystemInformation::GetTickCount64() }
+}
+
+// ---- Win32 real WinApi impl ----
+
+/// Concrete `WinApi` implementation that calls the real Win32 wrappers and the
+/// overlay.  Lives here (binary crate) rather than in `win_api_trait` because
+/// `win_api` and `overlay` are declared in `main.rs`'s module tree.
+pub struct Win32WinApi {
+    pub hinstance: windows::Win32::Foundation::HINSTANCE,
+}
+
+impl WinApi for Win32WinApi {
+    #[allow(clippy::result_unit_err)]
+    fn set_window_rect(&mut self, hwnd: WindowId, rect: Rect) -> Result<(), ()> {
+        let h = win_api::id_to_hwnd(hwnd);
+        if unsafe { win_api::set_window_rect(h, rect) } {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+    fn is_zoomed(&mut self, hwnd: WindowId) -> bool {
+        let h = win_api::id_to_hwnd(hwnd);
+        unsafe { win_api::is_zoomed(h) }
+    }
+    fn show_maximize(&mut self, hwnd: WindowId) {
+        let h = win_api::id_to_hwnd(hwnd);
+        unsafe { win_api::maximize(h) };
+    }
+    fn show_restore(&mut self, hwnd: WindowId) {
+        let h = win_api::id_to_hwnd(hwnd);
+        unsafe { win_api::restore(h) };
+    }
+    fn capture_mouse(&mut self, hwnd: WindowId) {
+        let h = win_api::id_to_hwnd(hwnd);
+        unsafe { win_api::capture_mouse(h) };
+    }
+    fn release_mouse(&mut self) {
+        unsafe { win_api::release_mouse() };
+    }
+    fn overlay_show(&mut self, rect: Rect) {
+        crate::overlay::show(self.hinstance, rect);
+    }
+    fn overlay_hide(&mut self) {
+        crate::overlay::hide();
+    }
 }

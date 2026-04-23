@@ -5,12 +5,22 @@ pub mod geometry;
 pub mod modifiers;
 pub mod policy;
 pub mod rules;
+pub mod snap;
 pub mod state;
 
 use crate::engine::config::{CenterMode, EngineConfig, MiddleClickAction};
 use crate::engine::geometry::ResizeAnchor;
 use crate::engine::modifiers::Modifiers;
-use crate::engine::state::{Action, DragMode, DragOrigin, Event, State};
+use crate::engine::state::{Action, DragMode, DragOrigin, Event, State, WindowId};
+
+/// Reason for leaving `State::Moving`. Internal to the FSM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExitMovingReason {
+    LeftUp,
+    DragAborted,
+    DisabledFromToggle,
+    DisabledFromReload,
+}
 
 pub struct Engine {
     state: State,
@@ -39,6 +49,47 @@ impl Engine {
     }
     pub fn config(&self) -> &EngineConfig {
         &self.config
+    }
+
+    /// Build a `SnapContext` + `SnapSession` for a move drag starting now, iff snap
+    /// is enabled and the adapter attached a monitor snapshot. Called from LeftDown
+    /// and center-move RightDown paths.
+    fn build_snap_for_move(
+        &self,
+        snapshot: Option<crate::engine::snap::MonitorSnapshot>,
+        grab: crate::engine::geometry::Point,
+        target_was_maximized: bool,
+    ) -> (
+        Option<crate::engine::snap::SnapContext>,
+        Option<crate::engine::snap::SnapSession>,
+    ) {
+        use crate::engine::snap::{bake_zones, SnapContext, SnapSession};
+        let Some(snapshot) = snapshot else {
+            return (None, None);
+        };
+        if !self.config.snap.enabled {
+            return (None, None);
+        }
+        let zones = bake_zones(&self.config.snap, &snapshot);
+        let restore_guard_active = target_was_maximized && self.config.restore_maximized_on_move;
+        let ctx = SnapContext {
+            monitors: snapshot,
+            zones,
+            engage_px: self.config.snap.engage_px,
+            disengage_px: self.config.snap.disengage_px,
+            grab,
+            restore_guard_active,
+        };
+        let session = SnapSession {
+            ctx: ctx.clone(),
+            engaged: None,
+            last_preview_rect: None,
+            suspended: self
+                .mods
+                .contains(crate::engine::modifiers::Modifiers::SPACE),
+            restore_guard_cleared: !restore_guard_active,
+        };
+        (Some(ctx), Some(session))
     }
 
     /// Process one event; return actions for the adapter to execute.
@@ -77,6 +128,24 @@ impl Engine {
                     };
                 }
                 self.reconcile_arm_state(&mut actions);
+
+                if *vk == crate::engine::state::VirtualKey::Space {
+                    if let State::Moving {
+                        snap_session: Some(session),
+                        ..
+                    } = &mut self.state
+                    {
+                        if *down {
+                            if session.engaged.take().is_some() {
+                                actions.push(Action::HideSnapPreview);
+                                session.last_preview_rect = None;
+                            }
+                            session.suspended = true;
+                        } else {
+                            session.suspended = false;
+                        }
+                    }
+                }
             }
             Event::LeftDown { cursor, target } => {
                 if let State::Armed = self.state {
@@ -105,11 +174,18 @@ impl Engine {
                         actions.push(Action::RaiseWindow { hwnd: target.hwnd });
                     }
 
+                    let (snap_ctx, snap_session) = self.build_snap_for_move(
+                        target.monitor_snapshot.clone(),
+                        *cursor,
+                        target.is_maximized,
+                    );
+
                     actions.push(Action::BeginDrag {
                         hwnd: target.hwnd,
                         initial_rect: target.initial_rect,
                         grab: *cursor,
                         mode: DragMode::Move,
+                        snap: snap_ctx,
                     });
                     actions.push(Action::SwallowEvent);
 
@@ -119,6 +195,7 @@ impl Engine {
                         grab: *cursor,
                         drag_origin: DragOrigin::PrimaryButton,
                         pending_passthrough: false,
+                        snap_session,
                     };
                 }
             }
@@ -144,13 +221,30 @@ impl Engine {
                     hwnd,
                     initial_rect,
                     grab,
+                    snap_session,
                     ..
-                } = &self.state
+                } = &mut self.state
                 {
                     let delta = cursor.delta(*grab);
+                    let unsnapped = initial_rect.translate_by(delta);
+
+                    if let Some(session) = snap_session.as_mut() {
+                        use crate::engine::snap::{evaluate, Decision};
+                        match evaluate(session, *cursor) {
+                            Decision::Engage(ez) => actions.push(Action::ShowSnapPreview {
+                                rect: ez.target_rect,
+                            }),
+                            Decision::Hold => {
+                                // No preview action — engine dedupes via last_preview_rect; adapter also idempotent.
+                            }
+                            Decision::Disengage => actions.push(Action::HideSnapPreview),
+                            Decision::None => {}
+                        }
+                    }
+
                     actions.push(Action::UpdateDrag {
                         hwnd: *hwnd,
-                        new_rect: initial_rect.translate_by(delta),
+                        new_rect: unsnapped,
                     });
                 } else if let State::Resizing {
                     hwnd,
@@ -170,18 +264,13 @@ impl Engine {
                 }
             }
             Event::LeftUp => {
-                if let State::Moving {
-                    hwnd,
-                    pending_passthrough,
-                    ..
-                } = &self.state
-                {
-                    let hwnd = *hwnd;
-                    let pp = *pending_passthrough;
-                    actions.push(Action::EndDrag { hwnd });
-                    actions.push(Action::CancelMenuActivation);
-                    self.state = if pp { State::PassThrough } else { State::Idle };
-                    self.reconcile_arm_state(&mut actions);
+                if matches!(self.state, State::Moving { .. }) {
+                    if let Some((_hwnd, pp)) =
+                        self.exit_moving(ExitMovingReason::LeftUp, &mut actions)
+                    {
+                        self.state = if pp { State::PassThrough } else { State::Idle };
+                        self.reconcile_arm_state(&mut actions);
+                    }
                 }
             }
             Event::RightDown { cursor, target } => {
@@ -210,11 +299,18 @@ impl Engine {
                     if sector == crate::engine::geometry::Sector::Center
                         && self.config.center_mode == CenterMode::Move
                     {
+                        let (snap_ctx, snap_session) = self.build_snap_for_move(
+                            target.monitor_snapshot.clone(),
+                            *cursor,
+                            target.is_maximized,
+                        );
+
                         actions.push(Action::BeginDrag {
                             hwnd: target.hwnd,
                             initial_rect: target.initial_rect,
                             grab: *cursor,
                             mode: DragMode::Move,
+                            snap: snap_ctx,
                         });
                         actions.push(Action::SwallowEvent);
                         self.state = State::Moving {
@@ -223,6 +319,7 @@ impl Engine {
                             grab: *cursor,
                             drag_origin: DragOrigin::CenterMoveMode,
                             pending_passthrough: false,
+                            snap_session,
                         };
                         return actions;
                     }
@@ -234,6 +331,7 @@ impl Engine {
                         initial_rect: target.initial_rect,
                         grab: *cursor,
                         mode: DragMode::Resize { anchor },
+                        snap: None,
                     });
                     actions.push(Action::SwallowEvent);
 
@@ -247,44 +345,60 @@ impl Engine {
                 }
             }
             Event::RightUp => {
-                let end = match &self.state {
-                    State::Resizing {
-                        hwnd,
-                        pending_passthrough,
-                        ..
-                    } => Some((*hwnd, *pending_passthrough)),
+                // Route Moving (center-move-mode) through exit_moving so a future snap engagement
+                // tears down cleanly. Resizing keeps the inline sequence (no snap applies to resize).
+                if matches!(
+                    self.state,
                     State::Moving {
-                        hwnd,
-                        pending_passthrough,
                         drag_origin: DragOrigin::CenterMoveMode,
                         ..
-                    } => Some((*hwnd, *pending_passthrough)),
-                    _ => None,
-                };
-                if let Some((hwnd, pp)) = end {
+                    }
+                ) {
+                    if let Some((_hwnd, pp)) =
+                        self.exit_moving(ExitMovingReason::LeftUp, &mut actions)
+                    {
+                        self.state = if pp { State::PassThrough } else { State::Idle };
+                        self.reconcile_arm_state(&mut actions);
+                    }
+                } else if let State::Resizing {
+                    hwnd,
+                    pending_passthrough,
+                    ..
+                } = &self.state
+                {
+                    let hwnd = *hwnd;
+                    let pp = *pending_passthrough;
                     actions.push(Action::EndDrag { hwnd });
                     actions.push(Action::CancelMenuActivation);
                     self.state = if pp { State::PassThrough } else { State::Idle };
                     self.reconcile_arm_state(&mut actions);
                 }
             }
-            Event::ToggleEnable => match std::mem::replace(&mut self.state, State::Idle) {
-                State::Disabled => {
-                    self.state = State::Idle;
-                    self.reconcile_arm_state(&mut actions);
-                    actions.push(Action::UpdateTrayIcon { enabled: true });
-                }
-                State::Moving { hwnd, .. } | State::Resizing { hwnd, .. } => {
-                    actions.push(Action::EndDrag { hwnd });
-                    actions.push(Action::CancelMenuActivation);
+            Event::ToggleEnable => {
+                if matches!(self.state, State::Moving { .. }) {
+                    let _ = self.exit_moving(ExitMovingReason::DisabledFromToggle, &mut actions);
                     self.state = State::Disabled;
                     actions.push(Action::UpdateTrayIcon { enabled: false });
+                } else {
+                    match std::mem::replace(&mut self.state, State::Idle) {
+                        State::Disabled => {
+                            self.state = State::Idle;
+                            self.reconcile_arm_state(&mut actions);
+                            actions.push(Action::UpdateTrayIcon { enabled: true });
+                        }
+                        State::Resizing { hwnd, .. } => {
+                            actions.push(Action::EndDrag { hwnd });
+                            actions.push(Action::CancelMenuActivation);
+                            self.state = State::Disabled;
+                            actions.push(Action::UpdateTrayIcon { enabled: false });
+                        }
+                        _other => {
+                            self.state = State::Disabled;
+                            actions.push(Action::UpdateTrayIcon { enabled: false });
+                        }
+                    }
                 }
-                _other => {
-                    self.state = State::Disabled;
-                    actions.push(Action::UpdateTrayIcon { enabled: false });
-                }
-            },
+            }
             Event::FullscreenFocused => match &mut self.state {
                 State::Idle | State::Armed => {
                     self.state = State::PassThrough;
@@ -317,9 +431,81 @@ impl Engine {
                     *pending_passthrough = false;
                 }
             }
+            Event::DragAborted { reason: _ } => {
+                if matches!(self.state, State::Moving { .. }) {
+                    if let Some((_hwnd, pp)) =
+                        self.exit_moving(ExitMovingReason::DragAborted, &mut actions)
+                    {
+                        self.state = if pp { State::PassThrough } else { State::Idle };
+                        self.reconcile_arm_state(&mut actions);
+                    }
+                } else if let State::Resizing {
+                    hwnd,
+                    pending_passthrough,
+                    ..
+                } = &self.state
+                {
+                    let hwnd = *hwnd;
+                    let pp = *pending_passthrough;
+                    actions.push(Action::EndDrag { hwnd });
+                    actions.push(Action::CancelMenuActivation);
+                    self.state = if pp { State::PassThrough } else { State::Idle };
+                    self.reconcile_arm_state(&mut actions);
+                }
+            }
         }
 
         actions
+    }
+
+    /// Central teardown path from `State::Moving`. Emits `HideSnapPreview` iff the
+    /// session had an engagement, then emits reason-specific actions. Returns
+    /// `(hwnd, pending_passthrough)` so the caller can set the next state.
+    /// Does NOT mutate `self.state` — caller is responsible for the next state transition.
+    fn exit_moving(
+        &mut self,
+        reason: ExitMovingReason,
+        actions: &mut Vec<Action>,
+    ) -> Option<(WindowId, bool)> {
+        let (hwnd, had_engaged, pending_passthrough) = match &self.state {
+            State::Moving {
+                hwnd,
+                snap_session,
+                pending_passthrough,
+                ..
+            } => (
+                *hwnd,
+                snap_session.as_ref().and_then(|s| s.engaged.clone()),
+                *pending_passthrough,
+            ),
+            _ => return None,
+        };
+
+        if had_engaged.is_some() {
+            actions.push(Action::HideSnapPreview);
+        }
+
+        match reason {
+            ExitMovingReason::LeftUp => {
+                if let Some(ez) = had_engaged {
+                    actions.push(Action::ApplySnapRect {
+                        hwnd,
+                        rect: ez.target_rect,
+                    });
+                }
+                actions.push(Action::EndDrag { hwnd });
+                actions.push(Action::CancelMenuActivation);
+            }
+            ExitMovingReason::DragAborted => {
+                actions.push(Action::EndDrag { hwnd });
+            }
+            ExitMovingReason::DisabledFromToggle | ExitMovingReason::DisabledFromReload => {
+                actions.push(Action::EndDrag { hwnd });
+                actions.push(Action::CancelMenuActivation);
+            }
+        }
+
+        Some((hwnd, pending_passthrough))
     }
 
     fn reconcile_arm_state(&mut self, actions: &mut Vec<Action>) {
@@ -346,8 +532,11 @@ impl Engine {
             self.reconcile_arm_state(&mut actions);
             actions.push(Action::UpdateTrayIcon { enabled: true });
         } else if !self.config.enabled && was_enabled {
-            if let State::Moving { hwnd, .. } | State::Resizing { hwnd, .. } = &self.state {
-                actions.push(Action::EndDrag { hwnd: *hwnd });
+            if matches!(self.state, State::Moving { .. }) {
+                let _ = self.exit_moving(ExitMovingReason::DisabledFromReload, &mut actions);
+            } else if let State::Resizing { hwnd, .. } = &self.state {
+                let hwnd = *hwnd;
+                actions.push(Action::EndDrag { hwnd });
                 actions.push(Action::CancelMenuActivation);
             }
             self.state = State::Disabled;

@@ -93,7 +93,13 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
 
     let swallow = if let Some(ev) = event {
         let actions = ENGINE.with(|e| e.borrow_mut().handle(ev));
-        crate::adapter::apply_actions(&actions)
+        let outcome = crate::adapter::apply_actions(&actions);
+        // Feed any re-entry events (e.g. DragAborted) back into the engine.
+        for re_ev in outcome.re_entry {
+            let re_actions = ENGINE.with(|e| e.borrow_mut().handle(re_ev));
+            crate::adapter::apply_actions(&re_actions);
+        }
+        outcome.swallow
     } else {
         false
     };
@@ -119,9 +125,9 @@ unsafe extern "system" fn key_hook(code: i32, wparam: WPARAM, lparam: LPARAM) ->
     let vk = map_vk(info.vkCode as u16);
 
     if let Some(vk) = vk {
-        let _ = ENGINE.with(|e| {
+        ENGINE.with(|e| {
             let actions = e.borrow_mut().handle(Event::KeyChange { vk, down });
-            crate::adapter::apply_actions(&actions)
+            crate::adapter::apply_actions(&actions);
         });
     }
     CallNextHookEx(None, code, wparam, lparam)

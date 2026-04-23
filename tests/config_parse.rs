@@ -615,3 +615,122 @@ fn bridge_middle_click_action_case_insensitive() {
         MiddleClickAction::ToggleMaximize
     );
 }
+
+// ── M4: [snap] file-layer serde tests ────────────────────────────────────────
+
+#[test]
+fn snap_section_defaults_when_missing() {
+    let toml = r#"
+        [activation]
+        modifier = "alt"
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    assert!(cfg.snap.enabled);
+    assert_eq!(cfg.snap.engage_distance_px, 24);
+    assert_eq!(cfg.snap.disengage_distance_px, 32);
+    assert_eq!(cfg.snap.preview_opacity, 0x99);
+    assert!(cfg.snap.zones.left_half);
+    assert!(!cfg.snap.zones.left_third);
+    assert!(!cfg.snap.zones.bottom_maximize);
+}
+
+#[test]
+fn snap_section_full_round_trip() {
+    let toml = r#"
+        [snap]
+        enabled = true
+        engage_distance_px = 30
+        disengage_distance_px = 40
+        preview_opacity = 200
+
+        [snap.zones]
+        top_maximize = false
+        left_third = true
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    assert_eq!(cfg.snap.engage_distance_px, 30);
+    assert_eq!(cfg.snap.disengage_distance_px, 40);
+    assert_eq!(cfg.snap.preview_opacity, 200);
+    assert!(!cfg.snap.zones.top_maximize);
+    assert!(cfg.snap.zones.left_third);
+}
+
+// ── M4: [snap] bridge + RuntimeConfig tests ──────────────────────────────────
+
+#[test]
+fn snap_bridge_clamps_disengage_up_to_engage_when_less() {
+    let toml = r#"
+        [snap]
+        engage_distance_px = 50
+        disengage_distance_px = 10
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert_eq!(rt.engine.snap.engage_px, 50);
+    assert_eq!(rt.engine.snap.disengage_px, 50);
+}
+
+#[test]
+fn snap_bridge_caps_engage_at_256() {
+    let toml = r#"
+        [snap]
+        engage_distance_px = 9999
+        disengage_distance_px = 9999
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert_eq!(rt.engine.snap.engage_px, 256);
+    assert_eq!(rt.engine.snap.disengage_px, 256);
+}
+
+#[test]
+fn snap_bridge_passes_zones_through() {
+    let toml = r#"
+        [snap.zones]
+        bottom_maximize = true
+        left_third = true
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert!(rt.engine.snap.zones.bottom_maximize);
+    assert!(rt.engine.snap.zones.left_third);
+}
+
+#[test]
+fn runtime_config_adapter_preview_opacity() {
+    let toml = r#"[snap]
+        preview_opacity = 128
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert_eq!(rt.adapter.preview_opacity, 128);
+}
+
+#[test]
+fn v01_config_without_snap_or_rules_still_loads() {
+    // A representative v0.1 config — no [snap], no [[rules]], no middle_click_action.
+    let toml = r#"
+        [activation]
+        modifier = "alt"
+
+        [behavior]
+        enable_move = true
+        enable_resize = true
+        raise_on_drag = false
+        restore_maximized_on_move = true
+
+        [resize]
+        center_mode = "symmetric"
+        center_fraction = 0.333
+
+        [exclude]
+        processes = []
+    "#;
+    let cfg: alt3rsnap::config::FileConfig = alt3rsnap::config::load_from_str(toml).unwrap();
+    let rt = cfg.to_runtime_config().unwrap();
+    assert!(
+        rt.engine.snap.enabled,
+        "snap enabled by default on upgrade per spec §7.3"
+    );
+    assert_eq!(rt.adapter.preview_opacity, 0x99);
+}
