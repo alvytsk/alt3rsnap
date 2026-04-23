@@ -7,11 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ## [0.2.1] — 2026-04-23
-### Changed
-- Add `rustfmt.toml` with explicit formatting rules
-- Add `[lints]` table to `Cargo.toml` (replaces implicit lint defaults)
-- Remove unused `windows` crate features: `Win32_System_Com`, `Win32_Storage_FileSystem`, `Win32_System_SystemInformation`
-- Add `.github/workflows/release.yml`: tag-triggered release builds UPX-packed `.exe` + SHA-256
+### Added
+- `rustfmt.toml` with explicit formatting rules
+- `[lints]` table in `Cargo.toml` for manifest-level lint control
+- `.github/workflows/release.yml`: tag-triggered release builds UPX-packed `.exe` + SHA-256
+
+### Removed
+- Unused `windows` crate features: `Win32_System_Com`, `Win32_Storage_FileSystem`, `Win32_System_SystemInformation`
 
 ## [0.2.0] — 2026-04-23
 ### Added
